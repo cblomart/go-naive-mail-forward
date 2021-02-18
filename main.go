@@ -46,7 +46,7 @@ func main() {
 	}
 
 	//handle connections
-	log.Printf("Listining to port 25 and waiting for connections\n", port)
+	log.Printf("Listining to port %d and waiting for connections\n", port)
 	for {
 		conn, err := listen.Accept()
 		if err != nil {
