@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cblomart/go-naive-mail-forward/store"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/textproto"
@@ -109,6 +110,13 @@ func (conn *SmtpConn) ProcessMessages() {
 				return
 			}
 			err = conn.rcptto(params)
+		case "DATA":
+			if !conn.hello {
+				log.Printf("%s: recipient without hello\n", conn.showClient())
+				err = conn.send(STATUSNOACK, "no hello")
+				return
+			}
+			err = conn.data()
 		default:
 			err = conn.unknown(cmd)
 		}
@@ -146,7 +154,6 @@ func (conn *SmtpConn) unknown(command string) error {
 func (conn *SmtpConn) helo(hostname string) (bool, error) {
 	// user lowercased hostname
 	hostname = strings.ToLower(hostname)
-	log.Printf("%s: checking fqdn: '%s'\n", conn.showClient(), hostname)
 	match, err := regexp.MatchString(fqdnMatch, hostname)
 	if err != nil || !match {
 		// regex failed
@@ -160,7 +167,9 @@ func (conn *SmtpConn) helo(hostname string) (bool, error) {
 	}
 	conn.hello = true
 	conn.clientName = hostname
-	log.Printf("%s: accepting name: '%s'\n", conn.showClient(), hostname)
+	if conn.Debug {
+		log.Printf("%s: accepting name: '%s'\n", conn.showClient(), hostname)
+	}
 	return false, conn.send(STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
@@ -205,6 +214,9 @@ func (conn *SmtpConn) request() (string, string, error) {
 	tp := textproto.NewReader(reader)
 	command, err := tp.ReadLine()
 	if err != nil {
+		if err == io.EOF {
+			return "", "", fmt.Errorf("Connection dropped")
+		}
 		log.Printf("%s: %s\n", conn.showClient(), err.Error())
 		return "", "", fmt.Errorf("Cannot read")
 	}

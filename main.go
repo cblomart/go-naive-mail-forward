@@ -3,6 +3,8 @@ package main
 import (
 	"cblomart/go-naive-mail-forward/smtp"
 	"cblomart/go-naive-mail-forward/store"
+	"flag"
+	"fmt"
 	"log"
 	"net"
 )
@@ -12,10 +14,26 @@ const (
 	OK       = 220
 )
 
+var (
+	debug      bool
+	servername string
+	port       int
+)
+
+func init() {
+	flag.BoolVar(&debug, "debug", false, "show debug messages")
+	flag.BoolVar(&debug, "d", false, "show debug messages")
+	flag.StringVar(&servername, "servername", "localhost", "hostname we are serving")
+	flag.StringVar(&servername, "s", "localhost", "hostname we are serving")
+	flag.IntVar(&port, "port", 25, "port to listen to")
+	flag.IntVar(&port, "p", 25, "port to listen to")
+}
+
 func main() {
 	log.Print("Starting Golang Naive Mail Forwarder")
+	flag.Parse()
 	// listen to port 25 (smtp)
-	listen, err := net.Listen("tcp", ":25")
+	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -28,12 +46,12 @@ func main() {
 	}
 
 	//handle connections
-	log.Print("Listining to port 25 and waiting for connections")
+	log.Printf("Listining to port 25 and waiting for connections\n", port)
 	for {
 		conn, err := listen.Accept()
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		go smtp.HandleSmtpConn(conn, "zerottl.cc", s, true)
+		go smtp.HandleSmtpConn(conn, servername, s, debug)
 	}
 }
