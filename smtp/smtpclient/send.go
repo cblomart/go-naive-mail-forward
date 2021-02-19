@@ -3,6 +3,7 @@ package smtpclient
 import (
 	"bufio"
 	"cblomart/go-naive-mail-forward/message"
+	"cblomart/go-naive-mail-forward/smtp"
 	"fmt"
 	"log"
 	"net"
@@ -41,6 +42,11 @@ func (c *SmtpClient) Connect() error {
 	if c.Debug {
 		log.Printf("client - %s:%s: < %s", c.localPort, c.Relay, line)
 	}
+	err = c.checkSmtpRespCode(smtp.STATUSRDY, line)
+	if err != nil {
+		c.Quit()
+		return err
+	}
 	return nil
 }
 
@@ -52,6 +58,25 @@ func (c *SmtpClient) Close() error {
 		return c.conn.Close()
 	}
 	return nil
+}
+
+func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) error {
+	if fmt.Sprintf("%d ", expcode) != line[:4] {
+		return fmt.Errorf("unexpexted error code returned %d", expcode)
+	}
+	return nil
+}
+
+func (c *SmtpClient) sendCmd(command string) error {
+	if c.Debug {
+		log.Printf("client - %s:%s: > %s", c.localPort, c.Relay, command)
+	}
+	_, err := fmt.Fprintf(c.conn, "%s\r\n", command)
+	return err
+}
+
+func (c *SmtpClient) Quit() error {
+	return c.sendCmd("QUIT")
 }
 
 func Send(relay string, msgs []message.Message, debug bool) ([]string, error) {
