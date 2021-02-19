@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	STATUSOK     = 220
+	STATUSRDY    = 220
 	STATUSBYE    = 221
-	STATUSDONE   = 250
+	STATUSOK     = 250
 	STATUSACT    = 354
 	STATUSERROR  = 500
 	STATUSNOTIMP = 502
@@ -128,26 +128,27 @@ func (conn *SmtpConn) ProcessMessages() {
 }
 
 func (conn *SmtpConn) showClient() string {
-	if len(conn.clientName) > 0 {
-		return conn.clientName
+	if len(conn.clientName) == 0 {
+		return conn.conn.RemoteAddr().String()
 	}
-	return conn.conn.RemoteAddr().String()
+	infos := strings.Split(conn.conn.RemoteAddr().String(), ":")
+	return fmt.Sprintf("%s:%s", conn.clientName, infos[:1])
 }
 
 func (conn *SmtpConn) send(status int, message string) error {
 	if conn.Debug {
-		log.Printf("%s > %d %s\n", conn.showClient(), status, message)
+		log.Printf("server - %s > %d %s\n", conn.showClient(), status, message)
 	}
 	_, err := fmt.Fprintf(conn.conn, "%d %s\r\n", status, message)
 	return err
 }
 
 func (conn *SmtpConn) ack() error {
-	return conn.send(STATUSOK, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
+	return conn.send(STATUSRDY, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
 }
 
 func (conn *SmtpConn) unknown(command string) error {
-	log.Printf("%s: syntax error: '%s'\n", conn.showClient(), command)
+	log.Printf("server - %s: syntax error: '%s'\n", conn.showClient(), command)
 	return conn.send(STATUSERROR, "syntax error")
 }
 
@@ -157,49 +158,49 @@ func (conn *SmtpConn) helo(hostname string) (bool, error) {
 	match, err := regexp.MatchString(fqdnMatch, hostname)
 	if err != nil || !match {
 		// regex failed
-		log.Printf("%s: failed to verify: '%s'\n", conn.showClient(), hostname)
+		log.Printf("server - %s: failed to verify: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(STATUSNOACK, "cannot continue")
 	}
 	if strings.ToUpper(strings.TrimRight(conn.ServerName, ".")) == strings.ToUpper(strings.TrimRight(hostname, ".")) {
 		// greeted with my name... funny
-		log.Printf("%s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
+		log.Printf("server - %s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(STATUSNOACK, "cannot continue")
 	}
 	conn.hello = true
 	conn.clientName = hostname
 	if conn.Debug {
-		log.Printf("%s: accepting name: '%s'\n", conn.showClient(), hostname)
+		log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
 	}
 	return false, conn.send(STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
 func (conn *SmtpConn) noop() error {
-	return conn.send(STATUSDONE, "ok")
+	return conn.send(STATUSOK, "ok")
 }
 
 func (conn *SmtpConn) rset() error {
-	log.Printf("%s: reseting status", conn.showClient())
+	log.Printf("server - %s: reseting status", conn.showClient())
 	conn.from = ""
 	conn.to = ""
-	return conn.send(STATUSDONE, "ok")
+	return conn.send(STATUSOK, "ok")
 }
 
 func (conn *SmtpConn) mailfrom(param string) error {
 	param = strings.Trim(param, "<>")
-	log.Printf("%s: mail from %s", conn.showClient(), param)
+	log.Printf("server - %s: mail from %s", conn.showClient(), param)
 	conn.from = param
-	return conn.send(STATUSDONE, "ok")
+	return conn.send(STATUSOK, "ok")
 }
 
 func (conn *SmtpConn) rcptto(param string) error {
 	param = strings.Trim(param, "<>")
-	log.Printf("%s: sending to %s", conn.showClient(), param)
+	log.Printf("server - %s: sending to %s", conn.showClient(), param)
 	conn.to = param
-	return conn.send(STATUSDONE, "ok")
+	return conn.send(STATUSOK, "ok")
 }
 
 func (conn *SmtpConn) data() error {
-	log.Printf("%s: recieveing data", conn.showClient())
+	log.Printf("server - %s: recieveing data", conn.showClient())
 	return conn.send(STATUSNOTIMP, "not implemented sorry :)")
 }
 
@@ -217,11 +218,11 @@ func (conn *SmtpConn) request() (string, string, error) {
 		if err == io.EOF {
 			return "", "", fmt.Errorf("Connection dropped")
 		}
-		log.Printf("%s: %s\n", conn.showClient(), err.Error())
+		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 		return "", "", fmt.Errorf("Cannot read")
 	}
 	if conn.Debug {
-		log.Printf("%s < %s\n", conn.showClient(), command)
+		log.Printf("server - %s < %s\n", conn.showClient(), command)
 	}
 	sep := " "
 	base := strings.ToUpper(command[:4])
