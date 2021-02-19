@@ -2,6 +2,7 @@ package store
 
 import (
 	"cblomart/go-naive-mail-forward/message"
+	"cblomart/go-naive-mail-forward/rules"
 	"fmt"
 )
 
@@ -15,10 +16,10 @@ type Store interface {
 	Type() string
 }
 
-func NewStore(storeType string) (Store, error) {
+func NewStore(storeType string, rules *rules.Rules) (Store, error) {
 	switch storeType {
 	case "memory":
-		return NewMemoryStore(), nil
+		return NewMemoryStore(rules), nil
 	}
 	return nil, fmt.Errorf("store type not found")
 }

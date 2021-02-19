@@ -2,16 +2,14 @@ package message
 
 import (
 	"bufio"
+	"cblomart/go-naive-mail-forward/address"
 	"strings"
 )
 
 type Message struct {
-	From     string
-	To       string
-	ToUser   string
-	ToDomain string
-	MX       string
-	Data     string
+	From *address.MailAddress
+	To   []address.MailAddress
+	Data string
 }
 
 func (m *Message) Signed() bool {

@@ -2,6 +2,7 @@ package store
 
 import (
 	"cblomart/go-naive-mail-forward/message"
+	"cblomart/go-naive-mail-forward/rules"
 	"fmt"
 	"log"
 	"strings"
@@ -14,13 +15,15 @@ type Memory struct {
 	messages map[string]message.Message
 	infos    map[string][]string
 	lock     *sync.Mutex
+	rules    *rules.Rules
 }
 
-func NewMemoryStore() Memory {
+func NewMemoryStore(rules *rules.Rules) Memory {
 	return Memory{
 		lock:     &sync.Mutex{},
 		messages: make(map[string]message.Message),
 		infos:    make(map[string][]string),
+		rules:    rules,
 	}
 }
 
@@ -28,18 +31,20 @@ func (m Memory) Add(msg message.Message) (string, error) {
 	id := uuid.New().String()
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	// updating to from rules
+	rcptTo := make([]string, len(msg.To))
+	for i, to := range msg.To {
+		rcptTo[i] = to.String()
+	}
+	log.Printf("storage - %s: original recipients: %s", id, strings.Join(rcptTo, ";"))
+	msg.To = m.rules.Evaluate(msg.To)
+	rcptTo = make([]string, len(msg.To))
+	for i, to := range msg.To {
+		rcptTo[i] = to.String()
+	}
+	log.Printf("storage - %s: updated recipients: %s", id, strings.Join(rcptTo, ";"))
 	m.messages[id] = msg
-	if _, ok := m.infos[msg.MX]; !ok {
-		m.infos[msg.MX] = make([]string, 0)
-	}
-	m.infos[msg.MX] = append(m.infos[msg.MX], id)
 	log.Printf("storage - added message %s", id)
-	var sb strings.Builder
-	for mx, ids := range m.infos {
-		sb.WriteString(mx)
-		sb.WriteString(fmt.Sprintf("[%d] ", len(ids)))
-	}
-	log.Printf("storage - mx stats: %s", strings.TrimSpace(sb.String()))
 	return id, nil
 }
 

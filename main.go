@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cblomart/go-naive-mail-forward/rules"
 	"cblomart/go-naive-mail-forward/smtp"
 	"cblomart/go-naive-mail-forward/store"
 	"flag"
@@ -19,22 +20,32 @@ var (
 	servername string
 	storage    string
 	port       int
+	forwards   string
 )
 
 func init() {
-	flag.BoolVar(&debug, "debug", false, "show debug messages")
-	flag.BoolVar(&debug, "d", false, "show debug messages")
 	flag.StringVar(&servername, "servername", "localhost", "hostname we are serving")
 	flag.StringVar(&servername, "n", "localhost", "hostname we are serving")
-	flag.StringVar(&storage, "storage", "memory", "storage connection")
-	flag.StringVar(&storage, "s", "memory", "storage connection")
 	flag.IntVar(&port, "port", 25, "port to listen to")
 	flag.IntVar(&port, "p", 25, "port to listen to")
+	flag.StringVar(&storage, "storage", "memory", "storage connection")
+	flag.StringVar(&storage, "s", "memory", "storage connection")
+	flag.BoolVar(&debug, "debug", false, "show debug messages")
+	flag.BoolVar(&debug, "d", false, "show debug messages")
+	flag.StringVar(&forwards, "rules", "", "rules to apply")
+	flag.StringVar(&forwards, "r", "", "rules to apply")
 }
 
 func main() {
 	log.Print("Starting Golang Naive Mail Forwarder")
 	flag.Parse()
+
+	// get the rules
+	f, err := rules.NewRules(forwards)
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+
 	// listen to port 25 (smtp)
 	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -43,7 +54,7 @@ func main() {
 	defer listen.Close()
 
 	// create the store
-	s, err := store.NewStore(storage)
+	s, err := store.NewStore(storage, f)
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -56,6 +67,6 @@ func main() {
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		go smtp.HandleSmtpConn(conn, servername, s, debug)
+		go smtp.HandleSmtpConn(conn, servername, s, f.GetValidDomains(), debug)
 	}
 }
