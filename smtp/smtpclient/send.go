@@ -1,16 +1,20 @@
 package smtpclient
 
 import (
+	"bufio"
 	"cblomart/go-naive-mail-forward/message"
 	"fmt"
 	"log"
 	"net"
+	"net/textproto"
+	"strings"
 )
 
 type SmtpClient struct {
-	conn  net.Conn
-	Relay string
-	Debug bool
+	conn      net.Conn
+	localPort string
+	Relay     string
+	Debug     bool
 }
 
 func (c *SmtpClient) Connect() error {
@@ -18,19 +22,34 @@ func (c *SmtpClient) Connect() error {
 	if err != nil {
 		return err
 	}
+	// get local port
+	parts := strings.Split(conn.LocalAddr().String(), ":")
+	c.localPort = parts[len(parts)-1]
 	if c.Debug {
-		log.Printf("client - connected to %s at %s", c.Relay, conn.RemoteAddr().String())
+		log.Printf("client - %s:%s: connected", c.localPort, c.Relay)
 	}
 	c.conn = conn
+	// check welcome message from server
+	// get a buffer reader
+	reader := bufio.NewReader(c.conn)
+	// get a text proto reader
+	tp := textproto.NewReader(reader)
+	line, err := tp.ReadLine()
+	if err != nil {
+		return err
+	}
+	if c.Debug {
+		log.Printf("client - %s:%s: < %s", c.localPort, c.Relay, line)
+	}
 	return nil
 }
 
 func (c *SmtpClient) Close() error {
+	if c.Debug {
+		log.Printf("client - disconnecting from %s", c.Relay)
+	}
 	if c.conn != nil {
 		return c.conn.Close()
-	}
-	if c.Debug {
-		log.Printf("client - disconnected from %s", c.Relay)
 	}
 	return nil
 }
