@@ -18,7 +18,7 @@ type Store interface {
 func NewStore(storeType string) (Store, error) {
 	switch storeType {
 	case "memory":
-		return Memory{}, nil
+		return NewMemoryStore(), nil
 	}
 	return nil, fmt.Errorf("store type not found")
 }

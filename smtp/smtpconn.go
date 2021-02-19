@@ -148,7 +148,7 @@ func (conn *SmtpConn) ProcessMessages() {
 			err = conn.unknown(cmd)
 		}
 		if err != nil {
-			log.Printf("%s: %s\n", conn.showClient(), err.Error())
+			log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 			break
 		}
 	}

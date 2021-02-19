@@ -16,6 +16,10 @@ type Memory struct {
 	lock     *sync.Mutex
 }
 
+func NewMemoryStore() Memory {
+	return Memory{lock: &sync.Mutex{}}
+}
+
 func (m Memory) Add(msg *message.Message) (string, error) {
 	id := uuid.New().String()
 	m.lock.Lock()
