@@ -5,7 +5,7 @@ import (
 	"cblomart/go-naive-mail-forward/address"
 	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/process"
-	"cblomart/go-naive-mail-froward/smtp"
+	"cblomart/go-naive-mail-forward/smtp"
 	"fmt"
 	"io"
 	"log"
@@ -135,7 +135,7 @@ func (conn *Conn) send(status int, message string) error {
 	if conn.Debug {
 		log.Printf("server - %s > %d %s\n", conn.showClient(), status, message)
 	}
-	_, err := fmt.Fprintf(conn.conn, "%d %s\r\n", smtp.STATUS, message)
+	_, err := fmt.Fprintf(conn.conn, "%d %s\r\n", status, message)
 	return err
 }
 
