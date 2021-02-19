@@ -1,4 +1,4 @@
-package smtp
+package smtpserver
 
 import (
 	"bufio"
@@ -14,22 +14,8 @@ import (
 	"strings"
 )
 
-const (
-	STATUSRDY    = 220
-	STATUSBYE    = 221
-	STATUSOK     = 250
-	STATUSACT    = 354
-	STATUSTMPER  = 451
-	STATUSERROR  = 500
-	STATUSNOTIMP = 502
-	STATUSBADSEC = 503
-	STATUSNOACK  = 521
-	STATUSNOPOL  = 550
-	STATUSNOSTOR = 552
-)
-
-//SmtpConn is a smtp client connection
-type SmtpConn struct {
+//Conn is a smtp client connection
+type Conn struct {
 	conn       net.Conn
 	hello      bool
 	clientName string
@@ -49,8 +35,8 @@ func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Proc
 	smtpConn.ProcessMessages()
 }
 
-func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, debug bool) *SmtpConn {
-	return &SmtpConn{
+func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, debug bool) *Conn {
+	return &Conn{
 		conn:       conn,
 		hello:      false,
 		clientName: "",
@@ -63,11 +49,11 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 	}
 }
 
-func (conn *SmtpConn) Close() error {
+func (conn *Conn) Close() error {
 	return conn.conn.Close()
 }
 
-func (conn *SmtpConn) ProcessMessages() {
+func (conn *Conn) ProcessMessages() {
 	log.Printf("%s: a new contender has arrived\n", conn.showClient())
 	// acknowlege the new comer
 	err := conn.ack()
@@ -136,7 +122,7 @@ func (conn *SmtpConn) ProcessMessages() {
 	}
 }
 
-func (conn *SmtpConn) showClient() string {
+func (conn *Conn) showClient() string {
 	if len(conn.clientName) == 0 {
 		return conn.conn.RemoteAddr().String()
 	}
@@ -144,7 +130,7 @@ func (conn *SmtpConn) showClient() string {
 	return fmt.Sprintf("%s:%s", conn.clientName, infos[len(infos)-1])
 }
 
-func (conn *SmtpConn) send(status int, message string) error {
+func (conn *Conn) send(status int, message string) error {
 	if conn.Debug {
 		log.Printf("server - %s > %d %s\n", conn.showClient(), status, message)
 	}
@@ -152,16 +138,16 @@ func (conn *SmtpConn) send(status int, message string) error {
 	return err
 }
 
-func (conn *SmtpConn) ack() error {
+func (conn *Conn) ack() error {
 	return conn.send(STATUSRDY, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
 }
 
-func (conn *SmtpConn) unknown(command string) error {
+func (conn *Conn) unknown(command string) error {
 	log.Printf("server - %s: syntax error: '%s'\n", conn.showClient(), command)
 	return conn.send(STATUSERROR, "syntax error")
 }
 
-func (conn *SmtpConn) helo(hostname string) (bool, error) {
+func (conn *Conn) helo(hostname string) (bool, error) {
 	// user lowercased hostname
 	hostname = strings.ToLower(hostname)
 	if !DomainMatch.MatchString(hostname) {
@@ -180,18 +166,18 @@ func (conn *SmtpConn) helo(hostname string) (bool, error) {
 	return false, conn.send(STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
-func (conn *SmtpConn) noop() error {
+func (conn *Conn) noop() error {
 	return conn.send(STATUSOK, "ok")
 }
 
-func (conn *SmtpConn) rset() error {
+func (conn *Conn) rset() error {
 	log.Printf("server - %s: reseting status", conn.showClient())
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
 	return conn.send(STATUSOK, "ok")
 }
 
-func (conn *SmtpConn) mailfrom(param string) error {
+func (conn *Conn) mailfrom(param string) error {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
 		log.Printf("server - %s: mail from %s not valid", conn.showClient(), ma)
@@ -202,7 +188,7 @@ func (conn *SmtpConn) mailfrom(param string) error {
 	return conn.send(STATUSOK, "ok")
 }
 
-func (conn *SmtpConn) rcptto(param string) error {
+func (conn *Conn) rcptto(param string) error {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
 		log.Printf("server - %s: recipient %s not valid", conn.showClient(), ma)
@@ -238,7 +224,7 @@ func (conn *SmtpConn) rcptto(param string) error {
 	return conn.send(STATUSOK, "ok")
 }
 
-func (conn *SmtpConn) data() error {
+func (conn *Conn) data() error {
 	if conn.Debug {
 		log.Printf("server - %s: recieveing data", conn.showClient())
 	}
@@ -290,12 +276,12 @@ func (conn *SmtpConn) data() error {
 	return conn.send(STATUSOK, "recieved 5/5")
 }
 
-func (conn *SmtpConn) quit() error {
+func (conn *Conn) quit() error {
 	log.Printf("server - %s: goodbye", conn.showClient())
 	return conn.send(STATUSBYE, "goodbye")
 }
 
-func (conn *SmtpConn) request() (string, string, error) {
+func (conn *Conn) request() (string, string, error) {
 	// get a buffer reader
 	reader := bufio.NewReader(conn.conn)
 	// get a text proto reader

@@ -1,28 +1,28 @@
-package smtp
+package process
 
 import (
 	"cblomart/go-naive-mail-forward/message"
-	"cblomart/go-naive-mail-forward/store"
+	"cblomart/go-naive-mail-forward/smtp/smtpclient"
 	"log"
-	"time"
 )
 
-func Send(store store.Store) {
+func (p *Process) Send() {
 	log.Printf("smtp - sending stored messages")
-	store.Lock()
-	defer store.Unlock()
+	p.Store.Lock()
+	defer p.Store.Unlock()
 	// select the top relay to send to and grab all the messages for it
-	relay, messages, err := calculateQueue(store)
+	relay, messages, err := p.calculateQueue()
 	if err != nil {
 		log.Printf("smtp - failed to select relay/messages: %s", err.Error())
 		return
 	}
 	log.Printf("smtp - sending %d messages to %s", len(messages), relay)
+	// send mesages
+	_, err = smtpclient.Send(relay, messages)
 }
 
-func calculateQueue(store store.Store) (string, []message.Message, error) {
-	start := time.Now()
-	msgIds, err := store.GetIds()
+func (p *Process) calculateQueue() (string, []message.Message, error) {
+	msgIds, err := p.Store.GetIds()
 	if err != nil {
 		return "", nil, err
 	}
@@ -35,7 +35,7 @@ func calculateQueue(store store.Store) (string, []message.Message, error) {
 	mxScore := map[string]int{}
 	max := 0
 	for i, id := range msgIds {
-		msg, err := store.Get(id)
+		msg, err := p.Store.Get(id)
 		if err != nil {
 			log.Printf("smtp - send: couldn't get message %s", id)
 			continue
@@ -78,7 +78,5 @@ func calculateQueue(store store.Store) (string, []message.Message, error) {
 			}
 		}
 	}
-	diff := time.Now().Sub(start)
-	log.Printf("smtp - selecting relay/messages took %s", diff.String())
 	return relay, relayMsgs, nil
 }

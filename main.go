@@ -3,7 +3,7 @@ package main
 import (
 	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/rules"
-	"cblomart/go-naive-mail-forward/smtp"
+	"cblomart/go-naive-mail-forward/smtp/smtpserver"
 	"flag"
 	"fmt"
 	"log"
@@ -78,7 +78,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				go smtp.Send(p.Store)
+				go p.Send()
 			case <-quit:
 				ticker.Stop()
 				return
@@ -93,6 +93,6 @@ func main() {
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		go smtp.HandleSmtpConn(conn, servername, p, domains, debug)
+		go smtpserver.HandleSmtpConn(conn, servername, p, domains, debug)
 	}
 }
