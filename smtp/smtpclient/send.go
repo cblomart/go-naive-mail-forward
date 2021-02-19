@@ -13,7 +13,7 @@ import (
 
 type SmtpClient struct {
 	conn      net.Conn
-	localPort string
+	LocalPort string
 	Relay     string
 	Hostname  string
 	Debug     bool
@@ -26,9 +26,9 @@ func (c *SmtpClient) Connect() error {
 	}
 	// get local port
 	parts := strings.Split(conn.LocalAddr().String(), ":")
-	c.localPort = parts[len(parts)-1]
+	c.LocalPort = parts[len(parts)-1]
 	if c.Debug {
-		log.Printf("client - %s:%s: connected", c.localPort, c.Relay)
+		log.Printf("client - %s:%s: connected", c.LocalPort, c.Relay)
 	}
 	c.conn = conn
 	_, err = c.readLine(smtp.STATUSRDY)
@@ -59,7 +59,7 @@ func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) error {
 
 func (c *SmtpClient) sendCmd(command string) error {
 	if c.Debug {
-		log.Printf("client - %s:%s: > %s", c.localPort, c.Relay, command)
+		log.Printf("client - %s:%s: > %s", c.LocalPort, c.Relay, command)
 	}
 	_, err := fmt.Fprintf(c.conn, "%s\r\n", command)
 	return err
@@ -76,7 +76,7 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 		return "", err
 	}
 	if c.Debug {
-		log.Printf("client - %s:%s: < %s", c.localPort, c.Relay, line)
+		log.Printf("client - %s:%s: < %s", c.LocalPort, c.Relay, line)
 	}
 	err = c.checkSmtpRespCode(code, line)
 	if err != nil {
@@ -91,6 +91,19 @@ func (c *SmtpClient) Quit() error {
 
 func (c *SmtpClient) Helo() error {
 	err := c.sendCmd(fmt.Sprintf("HELO %s", c.Hostname))
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSOK)
+	if err != nil {
+		c.Quit()
+		return err
+	}
+	return nil
+}
+
+func (c *SmtpClient) MailFrom(dest string) error {
+	err := c.sendCmd(fmt.Sprintf("MAIL FROM:<%s>", dest))
 	if err != nil {
 		return err
 	}
@@ -118,6 +131,15 @@ func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]
 	err = client.Helo()
 	if err != nil {
 		return nil, err
+	}
+	// loop over the messages
+	for _, msg := range msgs {
+		// sent mail from
+		err = client.MailFrom(msg.From.String())
+		if err != nil {
+			log.Printf("client - %s:%s: %s", client.LocalPort, client.Relay, err.Error())
+			continue
+		}
 	}
 	// close connection on exit
 	defer client.Close()

@@ -186,6 +186,7 @@ func (conn *Conn) mailfrom(param string) error {
 	}
 	log.Printf("server - %s: mail from %s", conn.showClient(), ma)
 	conn.mailFrom = ma
+	conn.rcptTo = make([]address.MailAddress, 0)
 	return conn.send(smtp.STATUSOK, "ok")
 }
 
