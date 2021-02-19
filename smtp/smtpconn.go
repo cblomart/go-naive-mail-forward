@@ -2,6 +2,7 @@ package smtp
 
 import (
 	"bufio"
+	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/store"
 	"fmt"
 	"io"
@@ -17,9 +18,11 @@ const (
 	STATUSBYE    = 221
 	STATUSOK     = 250
 	STATUSACT    = 354
+	STATUSTMPER  = 451
 	STATUSERROR  = 500
 	STATUSNOTIMP = 502
 	STATUSNOACK  = 521
+	STATUSNOSTOR = 552
 	fqdnMatch    = "^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$"
 )
 
@@ -63,19 +66,19 @@ func (conn *SmtpConn) ProcessMessages() {
 	// acknowlege the new comer
 	err := conn.ack()
 	if err != nil {
-		log.Printf("%s: %s\n", conn.showClient(), err.Error())
+		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 		return
 	}
 	// start the command response session
 	for {
 		cmd, params, err := conn.request()
 		if err != nil {
-			log.Printf("%s: %s\n", conn.showClient(), err.Error())
+			log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 			break
 		}
 		if conn.Debug {
-			log.Printf("%s: got command: '%s'\n", conn.showClient(), cmd)
-			log.Printf("%s: got params: '%s'\n", conn.showClient(), params)
+			log.Printf("server - %s: got command: '%s'\n", conn.showClient(), cmd)
+			log.Printf("server - %s: got params: '%s'\n", conn.showClient(), params)
 		}
 		switch cmd {
 		case "QUIT":
@@ -91,28 +94,28 @@ func (conn *SmtpConn) ProcessMessages() {
 			err = conn.noop()
 		case "RSET":
 			if !conn.hello {
-				log.Printf("%s: reset without hello\n", conn.showClient())
+				log.Printf("server - %s: reset without hello\n", conn.showClient())
 				err = conn.send(STATUSNOACK, "no hello")
 				return
 			}
 			err = conn.rset()
 		case "MAIL FROM":
 			if !conn.hello {
-				log.Printf("%s: recipient without hello\n", conn.showClient())
+				log.Printf("server - %s: recipient without hello\n", conn.showClient())
 				err = conn.send(STATUSNOACK, "no hello")
 				return
 			}
 			err = conn.mailfrom(params)
 		case "RCPT TO":
 			if !conn.hello {
-				log.Printf("%s: recipient without hello\n", conn.showClient())
+				log.Printf("server - %s: recipient without hello\n", conn.showClient())
 				err = conn.send(STATUSNOACK, "no hello")
 				return
 			}
 			err = conn.rcptto(params)
 		case "DATA":
 			if !conn.hello {
-				log.Printf("%s: recipient without hello\n", conn.showClient())
+				log.Printf("server - %s: recipient without hello\n", conn.showClient())
 				err = conn.send(STATUSNOACK, "no hello")
 				return
 			}
@@ -198,7 +201,15 @@ func (conn *SmtpConn) rcptto(param string) error {
 }
 
 func (conn *SmtpConn) data() error {
-	log.Printf("server - %s: recieveing data", conn.showClient())
+	if conn.Debug {
+		log.Printf("server - %s: recieveing data", conn.showClient())
+	}
+	// check if from and to ar there
+	if len(conn.from) == 0 || len(conn.to) == 0 {
+		// not ready to recieve a mail - i don't know where it goes!
+		log.Printf("server - %s: refusing data without 'from' and 'to'", conn.showClient())
+		return conn.send(STATUSTMPER, "please tell me from/to before sending a message")
+	}
 	err := conn.send(STATUSOK, "shoot")
 	if err != nil {
 		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
@@ -226,7 +237,18 @@ func (conn *SmtpConn) data() error {
 		}
 		sb.WriteString(line)
 	}
-	log.Printf("server - %s: recieved mail (%d bytes)", conn.showClient(), sb.Len())
+	// save to storage
+	msg := &message.Message{
+		From: conn.from,
+		To:   conn.to,
+		Data: sb.String(),
+	}
+	msgId, err := conn.msgStore.Add(msg)
+	if err != nil {
+		log.Printf("server - %s: error saving message: %s", conn.showClient(), err.Error())
+		return conn.send(STATUSNOSTOR, "cannot save message")
+	}
+	log.Printf("server - %s: recieved mail %s (%d bytes)", conn.showClient(), msgId, sb.Len())
 	return conn.send(STATUSACT, "recieved 5/5")
 }
 
