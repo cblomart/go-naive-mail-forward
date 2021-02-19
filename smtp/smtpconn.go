@@ -220,7 +220,17 @@ func (conn *SmtpConn) rcptto(param string) error {
 		log.Printf("server - %s: mail to %s not valid", conn.showClient(), ma)
 		return conn.send(STATUSNOPOL, "bad mail address")
 	}
-	conn.rcptTo = append(conn.rcptTo, *ma)
+	// check if recipient already given
+	found := false
+	for _, to := range conn.rcptTo {
+		if strings.ToUpper(strings.TrimRight(to.String(), ".")) == strings.ToUpper(strings.TrimRight(param, ".")) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		conn.rcptTo = append(conn.rcptTo, *ma)
+	}
 	addresses := make([]string, len(conn.rcptTo))
 	for i, ma := range conn.rcptTo {
 		addresses[i] = ma.String()
