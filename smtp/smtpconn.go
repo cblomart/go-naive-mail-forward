@@ -201,7 +201,35 @@ func (conn *SmtpConn) rcptto(param string) error {
 
 func (conn *SmtpConn) data() error {
 	log.Printf("server - %s: recieveing data", conn.showClient())
-	return conn.send(STATUSNOTIMP, "not implemented sorry :)")
+	err := conn.send(STATUSOK, "shoot")
+	if err != nil {
+		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
+		return fmt.Errorf("Cannot read")
+	}
+	// get a buffer reader
+	reader := bufio.NewReader(conn.conn)
+	// get a text proto reader
+	tp := textproto.NewReader(reader)
+	var sb strings.Builder
+	for {
+		line, err := tp.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				return fmt.Errorf("Connection dropped")
+			}
+			log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
+			return fmt.Errorf("Cannot read")
+		}
+		if conn.Debug {
+			log.Printf("server - %s < %s\n", conn.showClient(), line)
+		}
+		if line == "." {
+			break
+		}
+		sb.WriteString(line)
+	}
+	log.Printf("server - %s: read %d bytes of data", conn.showClient(), sb.Len())
+	return conn.send(STATUSACT, "recieved 5/5")
 }
 
 func (conn *SmtpConn) quit() error {
