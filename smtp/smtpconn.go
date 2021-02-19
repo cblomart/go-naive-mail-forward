@@ -289,7 +289,7 @@ func (conn *SmtpConn) data() error {
 		return conn.send(STATUSNOSTOR, "cannot save message")
 	}
 	log.Printf("server - %s: recieved mail %s (%d bytes)", conn.showClient(), msgId, sb.Len())
-	return conn.send(STATUSACT, "recieved 5/5")
+	return conn.send(STATUSOK, "recieved 5/5")
 }
 
 func (conn *SmtpConn) quit() error {
