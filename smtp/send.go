@@ -26,6 +26,10 @@ func calculateQueue(store store.Store) (string, []message.Message, error) {
 	if err != nil {
 		return "", nil, err
 	}
+	if len(msgIds) == 0 {
+		log.Printf("smtp - nothing to send")
+		return "", nil, nil
+	}
 	msgs := make([]message.Message, len(msgIds))
 	// scoring relays
 	mxScore := map[string]int{}

@@ -37,7 +37,7 @@ func init() {
 	flag.BoolVar(&debug, "d", false, "show debug messages")
 	flag.StringVar(&forwards, "rules", "", "rules to apply")
 	flag.StringVar(&forwards, "r", "", "rules to apply")
-	flag.StringVar(&interval, "interval", "30s", "interval between sends")
+	flag.StringVar(&interval, "interval", "10s", "interval between sends")
 	flag.StringVar(&interval, "i", "30s", "interval between sends")
 }
 

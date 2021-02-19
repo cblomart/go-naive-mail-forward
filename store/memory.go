@@ -59,7 +59,7 @@ func (m Memory) Get(id string) (*message.Message, error) {
 func (m Memory) GetIds() ([]string, error) {
 	ids := make([]string, len(m.messages))
 	i := 0
-	for id, _ := range m.messages {
+	for id := range m.messages {
 		ids[i] = id
 		i++
 	}
