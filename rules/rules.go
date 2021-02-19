@@ -7,6 +7,8 @@ import (
 	"log"
 	"regexp"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type Rules []Rule
@@ -64,18 +66,21 @@ func (rs *Rules) Evaluate(mas []address.MailAddress) []address.MailAddress {
 }
 
 func (rs *Rules) UpdateMessage(msg *message.Message) {
+	if len(msg.Id) == 0 {
+		msg.Id = uuid.NewString()
+	}
 	// updating to from rules
 	rcptTo := make([]string, len(msg.To))
 	for i, to := range msg.To {
 		rcptTo[i] = to.String()
 	}
-	log.Printf("rules - original recipients: %s", strings.Join(rcptTo, ";"))
+	log.Printf("rules - %s: original recipients: %s", msg.Id, strings.Join(rcptTo, ";"))
 	msg.To = rs.Evaluate(msg.To)
 	rcptTo = make([]string, len(msg.To))
 	for i, to := range msg.To {
 		rcptTo[i] = to.String()
 	}
-	log.Printf("rules - updated recipients: %s", strings.Join(rcptTo, ";"))
+	log.Printf("rules - %s: updated recipients: %s", msg.Id, strings.Join(rcptTo, ";"))
 }
 
 type Rule struct {

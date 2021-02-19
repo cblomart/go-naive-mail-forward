@@ -6,13 +6,10 @@ import (
 	"fmt"
 	"log"
 	"sync"
-
-	"github.com/google/uuid"
 )
 
 type Memory struct {
 	messages map[string]message.Message
-	infos    map[string][]string
 	lock     *sync.Mutex
 	rules    *rules.Rules
 }
@@ -21,20 +18,22 @@ func NewMemoryStore(rules *rules.Rules) Memory {
 	return Memory{
 		lock:     &sync.Mutex{},
 		messages: make(map[string]message.Message),
-		infos:    make(map[string][]string),
 		rules:    rules,
 	}
 }
 
 func (m Memory) Add(msg message.Message) (string, error) {
-	id := uuid.New().String()
+	if len(msg.Id) == 0 {
+		log.Printf("storage - rejecting unidentified message")
+		return "", fmt.Errorf("unidentified message recieved")
+	}
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	// updating to from rules
 	m.rules.UpdateMessage(&msg)
-	m.messages[id] = msg
-	log.Printf("storage - added message %s", id)
-	return id, nil
+	m.messages[msg.Id] = msg
+	log.Printf("storage - added message %s", msg.Id)
+	return msg.Id, nil
 }
 
 func (m Memory) Lock() {
@@ -57,8 +56,14 @@ func (m Memory) Get(id string) (*message.Message, error) {
 	return nil, fmt.Errorf("Message not found")
 }
 
-func (m Memory) GetInfos() (map[string][]string, error) {
-	return m.infos, nil
+func (m Memory) GetIds() ([]string, error) {
+	ids := make([]string, len(m.messages))
+	i := 0
+	for id, _ := range m.messages {
+		ids[i] = id
+		i++
+	}
+	return ids, nil
 }
 
 func (m Memory) Type() string {

@@ -7,6 +7,7 @@ import (
 )
 
 type Message struct {
+	Id   string
 	From *address.MailAddress
 	To   []address.MailAddress
 	Data string

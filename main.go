@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 )
 
 const (
@@ -22,6 +23,7 @@ var (
 	storage    string
 	port       int
 	forwards   string
+	interval   string
 )
 
 func init() {
@@ -35,6 +37,8 @@ func init() {
 	flag.BoolVar(&debug, "d", false, "show debug messages")
 	flag.StringVar(&forwards, "rules", "", "rules to apply")
 	flag.StringVar(&forwards, "r", "", "rules to apply")
+	flag.StringVar(&interval, "interval", "30s", "interval between sends")
+	flag.StringVar(&interval, "i", "30s", "interval between sends")
 }
 
 func main() {
@@ -62,6 +66,25 @@ func main() {
 		log.Fatalln(err.Error())
 	}
 	log.Printf("Instantiated %s storage\n", s.Type())
+
+	// start scheduled storage send process
+	d, err := time.ParseDuration(interval)
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+	ticker := time.NewTicker(d)
+	quit := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				go smtp.Send(s)
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
 
 	//handle connections
 	log.Printf("Listining on %s:%d and waiting for connections\n", servername, port)

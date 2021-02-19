@@ -12,7 +12,7 @@ type Store interface {
 	Add(msg message.Message) (string, error)
 	Remove(id string) error
 	Get(id string) (*message.Message, error)
-	GetInfos() (map[string][]string, error)
+	GetIds() ([]string, error)
 	Type() string
 }
 
