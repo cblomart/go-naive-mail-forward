@@ -49,13 +49,13 @@ func HandleSmtpConn(tcpConn net.Conn, serverName string, store store.Store, doma
 	smtpConn.ProcessMessages()
 }
 
-func NewSmtpConn(conn net.Conn, serverName string, store store.Store, domains []string, debut bool) *SmtpConn {
+func NewSmtpConn(conn net.Conn, serverName string, store store.Store, domains []string, debug bool) *SmtpConn {
 	return &SmtpConn{
 		conn:       conn,
 		hello:      false,
 		clientName: "",
-		ServerName: "",
-		Debug:      false,
+		ServerName: serverName,
+		Debug:      debug,
 		mailFrom:   nil,
 		rcptTo:     make([]address.MailAddress, 0),
 		msgStore:   store,
