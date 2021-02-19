@@ -115,8 +115,20 @@ func (c *SmtpClient) MailFrom(dest string) error {
 	return nil
 }
 
+func (c *SmtpClient) RcptTo(dest string) error {
+	err := c.sendCmd(fmt.Sprintf("RCPT TO:<%s>", dest))
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSOK)
+	if err != nil {
+		c.Quit()
+		return err
+	}
+	return nil
+}
+
 func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]string, error) {
-	log.Printf("client - sending %d messages via %s", len(msgs), relay)
 	// create smtp client
 	client := &SmtpClient{
 		Relay:    relay,
@@ -134,14 +146,41 @@ func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]
 		return nil, err
 	}
 	// loop over the messages
+	// prepare relay for fqdn check
+	upperRelay := strings.ToUpper(strings.TrimRight(client.Relay, "."))
 	for _, msg := range msgs {
-		log.Printf("client - %s:%s: sending message %s", client.LocalPort, client.Relay, msg.Id)
+		log.Printf("client - %s:%s:%s sending message", client.LocalPort, client.Relay, msg.Id)
 		// sent mail from
 		err = client.MailFrom(msg.From.String())
 		if err != nil {
-			log.Printf("client - %s:%s: %s", client.LocalPort, client.Relay, err.Error())
+			log.Printf("client - %s:%s:%s: %s", client.LocalPort, client.Relay, msg.Id, err.Error())
 			continue
 		}
+		rcptSet := false
+		for _, to := range msg.To {
+			// check if relay in mx for recipient
+			found := false
+			for _, mx := range to.MX {
+				if strings.ToUpper(strings.TrimRight(mx, ".")) == upperRelay {
+					found = true
+					break
+				}
+			}
+			if found {
+				log.Printf("client - %s:%s:%s adding recipient %s for relay", client.LocalPort, client.Relay, msg.Id, to.String())
+				err = client.RcptTo(to.String())
+				if err != nil {
+					log.Printf("client - %s:%s:%s %s", client.LocalPort, client.Relay, msg.Id, err.Error())
+					continue
+				}
+				rcptSet = true
+			}
+		}
+		if !rcptSet {
+			log.Printf("client - %s:%s:%s no recipient added for message", client.LocalPort, client.Relay, msg.Id)
+			continue
+		}
+		// need to send data!
 	}
 	// close connection on exit
 	defer client.Close()
