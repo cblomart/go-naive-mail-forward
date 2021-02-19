@@ -11,16 +11,19 @@ import (
 )
 
 type Memory struct {
-	messages map[string]*message.Message
+	messages map[string]message.Message
 	infos    map[string][]string
 	lock     *sync.Mutex
 }
 
 func NewMemoryStore() Memory {
-	return Memory{lock: &sync.Mutex{}}
+	return Memory{
+		lock:     &sync.Mutex{},
+		messages: make(map[string]message.Message),
+	}
 }
 
-func (m Memory) Add(msg *message.Message) (string, error) {
+func (m Memory) Add(msg message.Message) (string, error) {
 	id := uuid.New().String()
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -51,7 +54,7 @@ func (m Memory) Remove(id string) error {
 
 func (m Memory) Get(id string) (*message.Message, error) {
 	if msg, ok := m.messages[id]; ok {
-		return msg, nil
+		return &msg, nil
 	}
 	return nil, fmt.Errorf("Message not found")
 }

@@ -275,7 +275,7 @@ func (conn *SmtpConn) data() error {
 		sb.WriteString(line)
 	}
 	// save to storage
-	msg := &message.Message{
+	msg := message.Message{
 		From:     conn.from,
 		To:       conn.to,
 		Data:     sb.String(),
