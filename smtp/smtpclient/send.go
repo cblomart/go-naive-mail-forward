@@ -134,6 +134,7 @@ func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]
 	}
 	// loop over the messages
 	for _, msg := range msgs {
+		log.Printf("client - %s:%s: sending message %s", client.LocalPort, client.Relay, msg.Id)
 		// sent mail from
 		err = client.MailFrom(msg.From.String())
 		if err != nil {
