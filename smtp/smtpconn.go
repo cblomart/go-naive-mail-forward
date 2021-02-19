@@ -46,7 +46,6 @@ var DomainMatch = regexp.MustCompile("^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$")
 func HandleSmtpConn(tcpConn net.Conn, serverName string, store store.Store, domains []string, debug bool) {
 	smtpConn := NewSmtpConn(tcpConn, serverName, store, domains, debug)
 	defer smtpConn.Close()
-	log.Printf("Processing mails from domains: %s", strings.Join(domains, ", "))
 	smtpConn.ProcessMessages()
 }
 

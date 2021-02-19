@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 )
 
 const (
@@ -45,6 +46,8 @@ func main() {
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
+	domains := f.GetValidDomains()
+	log.Printf("accepting domains: %s", strings.Join(domains, ", "))
 
 	// listen to port 25 (smtp)
 	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -67,6 +70,6 @@ func main() {
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		go smtp.HandleSmtpConn(conn, servername, s, f.GetValidDomains(), debug)
+		go smtp.HandleSmtpConn(conn, servername, s, domains, debug)
 	}
 }
