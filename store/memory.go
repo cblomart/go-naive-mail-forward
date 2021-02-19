@@ -18,3 +18,7 @@ func (m Memory) Add(msg *message.Message) (string, error) {
 func (m Memory) Remove(id string) error {
 	return fmt.Errorf("not implemented")
 }
+
+func (m Memory) Type() string {
+	return "memory"
+}

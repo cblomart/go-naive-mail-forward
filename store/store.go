@@ -8,6 +8,7 @@ import (
 type Store interface {
 	Add(msg *message.Message) (string, error)
 	Remove(id string) error
+	Type() string
 }
 
 func NewStore(storeType string) (Store, error) {
