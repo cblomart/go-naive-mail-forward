@@ -116,6 +116,7 @@ func (c *SmtpClient) MailFrom(dest string) error {
 }
 
 func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]string, error) {
+	log.Printf("client - sending %d messages via %s", len(msgs), relay)
 	// create smtp client
 	client := &SmtpClient{
 		Relay:    relay,
