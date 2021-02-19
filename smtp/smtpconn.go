@@ -247,7 +247,7 @@ func (conn *SmtpConn) data() error {
 		log.Printf("server - %s: refusing data without 'from' and 'to'", conn.showClient())
 		return conn.send(STATUSBADSEC, "please tell me from/to before sending a message")
 	}
-	err := conn.send(STATUSOK, "shoot")
+	err := conn.send(STATUSACT, "shoot")
 	if err != nil {
 		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 		return fmt.Errorf("Cannot read")
