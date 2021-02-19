@@ -20,6 +20,7 @@ func NewMemoryStore() Memory {
 	return Memory{
 		lock:     &sync.Mutex{},
 		messages: make(map[string]message.Message),
+		infos:    make(map[string][]string),
 	}
 }
 
