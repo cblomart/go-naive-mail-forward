@@ -132,7 +132,7 @@ func (conn *SmtpConn) showClient() string {
 		return conn.conn.RemoteAddr().String()
 	}
 	infos := strings.Split(conn.conn.RemoteAddr().String(), ":")
-	return fmt.Sprintf("%s:%s", conn.clientName, infos[:1])
+	return fmt.Sprintf("%s:%s", conn.clientName, infos[len(infos)-1])
 }
 
 func (conn *SmtpConn) send(status int, message string) error {
