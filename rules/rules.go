@@ -2,6 +2,7 @@ package rules
 
 import (
 	"cblomart/go-naive-mail-forward/address"
+	"cblomart/go-naive-mail-forward/message"
 	"fmt"
 	"log"
 	"regexp"
@@ -60,6 +61,21 @@ func (rs *Rules) Evaluate(mas []address.MailAddress) []address.MailAddress {
 		i++
 	}
 	return result
+}
+
+func (rs *Rules) UpdateMessage(msg *message.Message) {
+	// updating to from rules
+	rcptTo := make([]string, len(msg.To))
+	for i, to := range msg.To {
+		rcptTo[i] = to.String()
+	}
+	log.Printf("rules - original recipients: %s", strings.Join(rcptTo, ";"))
+	msg.To = rs.Evaluate(msg.To)
+	rcptTo = make([]string, len(msg.To))
+	for i, to := range msg.To {
+		rcptTo[i] = to.String()
+	}
+	log.Printf("rules - updated recipients: %s", strings.Join(rcptTo, ";"))
 }
 
 type Rule struct {

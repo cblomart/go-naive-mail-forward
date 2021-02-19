@@ -5,7 +5,6 @@ import (
 	"cblomart/go-naive-mail-forward/rules"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -32,17 +31,7 @@ func (m Memory) Add(msg message.Message) (string, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	// updating to from rules
-	rcptTo := make([]string, len(msg.To))
-	for i, to := range msg.To {
-		rcptTo[i] = to.String()
-	}
-	log.Printf("storage - %s: original recipients: %s", id, strings.Join(rcptTo, ";"))
-	msg.To = m.rules.Evaluate(msg.To)
-	rcptTo = make([]string, len(msg.To))
-	for i, to := range msg.To {
-		rcptTo[i] = to.String()
-	}
-	log.Printf("storage - %s: updated recipients: %s", id, strings.Join(rcptTo, ";"))
+	m.rules.UpdateMessage(&msg)
 	m.messages[id] = msg
 	log.Printf("storage - added message %s", id)
 	return id, nil
