@@ -11,6 +11,9 @@ import (
 type Rules []Rule
 
 func NewRules(rules string) (*Rules, error) {
+	if len(rules) == 0 {
+		return nil, fmt.Errorf("no rules")
+	}
 	parts := strings.Split(rules, ";")
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("no rules")
@@ -23,6 +26,9 @@ func NewRules(rules string) (*Rules, error) {
 			continue
 		}
 		rs = append(rs, *rule)
+	}
+	if len(rs) == 0 {
+		return nil, fmt.Errorf("no rules parsed")
 	}
 	return &rs, nil
 }
