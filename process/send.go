@@ -16,9 +16,12 @@ func (p *Process) Send() {
 		log.Printf("smtp - failed to select relay/messages: %s", err.Error())
 		return
 	}
+	if len(messages) == 0 || len(relay) == 0 {
+		return
+	}
 	log.Printf("smtp - sending %d messages to %s", len(messages), relay)
 	// send mesages
-	_, err = smtpclient.Send(relay, messages, p.Debug)
+	_, err = smtpclient.Send(p.Hostname, relay, messages, p.Debug)
 }
 
 func (p *Process) calculateQueue() (string, []message.Message, error) {

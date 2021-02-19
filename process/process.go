@@ -8,20 +8,22 @@ import (
 )
 
 type Process struct {
-	rules *rules.Rules
-	Store store.Store
-	Debug bool
+	rules    *rules.Rules
+	Store    store.Store
+	Hostname string
+	Debug    bool
 }
 
-func NewProcessor(storeType string, processRules *rules.Rules, debug bool) (*Process, error) {
+func NewProcessor(hostname string, storeType string, processRules *rules.Rules, debug bool) (*Process, error) {
 	s, err := store.NewStore(storeType)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create storage")
 	}
 	return &Process{
-		rules: processRules,
-		Store: s,
-		Debug: debug,
+		rules:    processRules,
+		Store:    s,
+		Debug:    debug,
+		Hostname: hostname,
 	}, nil
 }
 
