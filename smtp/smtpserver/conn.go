@@ -5,6 +5,7 @@ import (
 	"cblomart/go-naive-mail-forward/address"
 	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/process"
+	"cblomart/go-naive-mail-froward/smtp"
 	"fmt"
 	"io"
 	"log"
@@ -87,28 +88,28 @@ func (conn *Conn) ProcessMessages() {
 		case "RSET":
 			if !conn.hello {
 				log.Printf("server - %s: reset without hello\n", conn.showClient())
-				err = conn.send(STATUSBADSEC, "no hello")
+				err = conn.send(smtp.STATUSBADSEC, "no hello")
 				return
 			}
 			err = conn.rset()
 		case "MAIL FROM":
 			if !conn.hello {
 				log.Printf("server - %s: recipient without hello\n", conn.showClient())
-				err = conn.send(STATUSBADSEC, "no hello")
+				err = conn.send(smtp.STATUSBADSEC, "no hello")
 				return
 			}
 			err = conn.mailfrom(params)
 		case "RCPT TO":
 			if !conn.hello {
 				log.Printf("server - %s: recipient without hello\n", conn.showClient())
-				err = conn.send(STATUSBADSEC, "no hello")
+				err = conn.send(smtp.STATUSBADSEC, "no hello")
 				return
 			}
 			err = conn.rcptto(params)
 		case "DATA":
 			if !conn.hello {
 				log.Printf("server - %s: recipient without hello\n", conn.showClient())
-				err = conn.send(STATUSBADSEC, "no hello")
+				err = conn.send(smtp.STATUSBADSEC, "no hello")
 				return
 			}
 			err = conn.data()
@@ -134,17 +135,17 @@ func (conn *Conn) send(status int, message string) error {
 	if conn.Debug {
 		log.Printf("server - %s > %d %s\n", conn.showClient(), status, message)
 	}
-	_, err := fmt.Fprintf(conn.conn, "%d %s\r\n", status, message)
+	_, err := fmt.Fprintf(conn.conn, "%d %s\r\n", smtp.STATUS, message)
 	return err
 }
 
 func (conn *Conn) ack() error {
-	return conn.send(STATUSRDY, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
+	return conn.send(smtp.STATUSRDY, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
 }
 
 func (conn *Conn) unknown(command string) error {
 	log.Printf("server - %s: syntax error: '%s'\n", conn.showClient(), command)
-	return conn.send(STATUSERROR, "syntax error")
+	return conn.send(smtp.STATUSERROR, "syntax error")
 }
 
 func (conn *Conn) helo(hostname string) (bool, error) {
@@ -153,46 +154,46 @@ func (conn *Conn) helo(hostname string) (bool, error) {
 	if !DomainMatch.MatchString(hostname) {
 		// regex failed
 		log.Printf("server - %s: failed to verify: '%s'\n", conn.showClient(), hostname)
-		return true, conn.send(STATUSNOACK, "cannot continue")
+		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	if strings.ToUpper(strings.TrimRight(conn.ServerName, ".")) == strings.ToUpper(strings.TrimRight(hostname, ".")) {
 		// greeted with my name... funny
 		log.Printf("server - %s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
-		return true, conn.send(STATUSNOACK, "cannot continue")
+		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	conn.hello = true
 	conn.clientName = hostname
 	log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
-	return false, conn.send(STATUSOK, fmt.Sprintf("welcome %s", hostname))
+	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
 func (conn *Conn) noop() error {
-	return conn.send(STATUSOK, "ok")
+	return conn.send(smtp.STATUSOK, "ok")
 }
 
 func (conn *Conn) rset() error {
-	log.Printf("server - %s: reseting status", conn.showClient())
+	log.Printf("server - %s: reseting smtp.STATUS", conn.showClient())
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
-	return conn.send(STATUSOK, "ok")
+	return conn.send(smtp.STATUSOK, "ok")
 }
 
 func (conn *Conn) mailfrom(param string) error {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
 		log.Printf("server - %s: mail from %s not valid", conn.showClient(), ma)
-		return conn.send(STATUSNOPOL, "bad mail address")
+		return conn.send(smtp.STATUSNOPOL, "bad mail address")
 	}
 	log.Printf("server - %s: mail from %s", conn.showClient(), ma)
 	conn.mailFrom = ma
-	return conn.send(STATUSOK, "ok")
+	return conn.send(smtp.STATUSOK, "ok")
 }
 
 func (conn *Conn) rcptto(param string) error {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
 		log.Printf("server - %s: recipient %s not valid", conn.showClient(), ma)
-		return conn.send(STATUSNOPOL, "bad mail address")
+		return conn.send(smtp.STATUSNOPOL, "bad mail address")
 	}
 	acceptedDomain := false
 	for _, domain := range conn.domains {
@@ -203,7 +204,7 @@ func (conn *Conn) rcptto(param string) error {
 	}
 	if !acceptedDomain {
 		log.Printf("server - %s: recipient %s not in a valid domain", conn.showClient(), ma)
-		return conn.send(STATUSNOPOL, "unaccepted domain")
+		return conn.send(smtp.STATUSNOPOL, "unaccepted domain")
 	}
 	// check if recipient already given
 	found := false
@@ -221,7 +222,7 @@ func (conn *Conn) rcptto(param string) error {
 		addresses[i] = ma.String()
 	}
 	log.Printf("server - %s: sending to %s", conn.showClient(), strings.Join(addresses, ";"))
-	return conn.send(STATUSOK, "ok")
+	return conn.send(smtp.STATUSOK, "ok")
 }
 
 func (conn *Conn) data() error {
@@ -232,9 +233,9 @@ func (conn *Conn) data() error {
 	if len(conn.rcptTo) == 0 || conn.mailFrom == nil {
 		// not ready to recieve a mail - i don't know where it goes!
 		log.Printf("server - %s: refusing data without 'from' and 'to'", conn.showClient())
-		return conn.send(STATUSBADSEC, "please tell me from/to before sending a message")
+		return conn.send(smtp.STATUSBADSEC, "please tell me from/to before sending a message")
 	}
-	err := conn.send(STATUSACT, "shoot")
+	err := conn.send(smtp.STATUSACT, "shoot")
 	if err != nil {
 		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 		return fmt.Errorf("Cannot read")
@@ -270,15 +271,15 @@ func (conn *Conn) data() error {
 	msgId, err := conn.processor.Add(msg)
 	if err != nil {
 		log.Printf("server - %s: error saving message: %s", conn.showClient(), err.Error())
-		return conn.send(STATUSNOSTOR, "cannot save message")
+		return conn.send(smtp.STATUSNOSTOR, "cannot save message")
 	}
 	log.Printf("server - %s: recieved mail %s (%d bytes)", conn.showClient(), msgId, sb.Len())
-	return conn.send(STATUSOK, "recieved 5/5")
+	return conn.send(smtp.STATUSOK, "recieved 5/5")
 }
 
 func (conn *Conn) quit() error {
 	log.Printf("server - %s: goodbye", conn.showClient())
-	return conn.send(STATUSBYE, "goodbye")
+	return conn.send(smtp.STATUSBYE, "goodbye")
 }
 
 func (conn *Conn) request() (string, string, error) {
