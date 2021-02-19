@@ -197,17 +197,6 @@ func (conn *SmtpConn) mailfrom(param string) error {
 		log.Printf("server - %s: mail from %s not valid", conn.showClient(), ma)
 		return conn.send(STATUSNOPOL, "bad mail address")
 	}
-	acceptedDomain := false
-	for _, domain := range conn.domains {
-		if strings.ToUpper(strings.TrimRight(ma.Domain, ".")) == strings.ToUpper(strings.TrimRight(domain, ".")) {
-			acceptedDomain = true
-			break
-		}
-	}
-	if !acceptedDomain {
-		log.Printf("server - %s: mail from %s not in a valid domain", conn.showClient(), ma)
-		return conn.send(STATUSNOPOL, "unaccepted domain")
-	}
 	log.Printf("server - %s: mail from %s", conn.showClient(), ma)
 	conn.mailFrom = ma
 	return conn.send(STATUSOK, "ok")
@@ -216,8 +205,19 @@ func (conn *SmtpConn) mailfrom(param string) error {
 func (conn *SmtpConn) rcptto(param string) error {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
-		log.Printf("server - %s: mail to %s not valid", conn.showClient(), ma)
+		log.Printf("server - %s: recipient %s not valid", conn.showClient(), ma)
 		return conn.send(STATUSNOPOL, "bad mail address")
+	}
+	acceptedDomain := false
+	for _, domain := range conn.domains {
+		if strings.ToUpper(strings.TrimRight(ma.Domain, ".")) == strings.ToUpper(strings.TrimRight(domain, ".")) {
+			acceptedDomain = true
+			break
+		}
+	}
+	if !acceptedDomain {
+		log.Printf("server - %s: recipient %s not in a valid domain", conn.showClient(), ma)
+		return conn.send(STATUSNOPOL, "unaccepted domain")
 	}
 	// check if recipient already given
 	found := false
