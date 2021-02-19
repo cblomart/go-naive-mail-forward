@@ -168,9 +168,7 @@ func (conn *SmtpConn) helo(hostname string) (bool, error) {
 	}
 	conn.hello = true
 	conn.clientName = hostname
-	if conn.Debug {
-		log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
-	}
+	log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
 	return false, conn.send(STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
@@ -228,11 +226,12 @@ func (conn *SmtpConn) data() error {
 		}
 		sb.WriteString(line)
 	}
-	log.Printf("server - %s: read %d bytes of data", conn.showClient(), sb.Len())
+	log.Printf("server - %s: recieved mail (%d bytes)", conn.showClient(), sb.Len())
 	return conn.send(STATUSACT, "recieved 5/5")
 }
 
 func (conn *SmtpConn) quit() error {
+	log.Printf("server - %s: goodbye", conn.showClient())
 	return conn.send(STATUSBYE, "goodbye")
 }
 
