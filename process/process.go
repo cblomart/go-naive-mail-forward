@@ -10,9 +10,10 @@ import (
 type Process struct {
 	rules *rules.Rules
 	Store store.Store
+	Debug bool
 }
 
-func NewProcessor(storeType string, processRules *rules.Rules) (*Process, error) {
+func NewProcessor(storeType string, processRules *rules.Rules, debug bool) (*Process, error) {
 	s, err := store.NewStore(storeType)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create storage")
@@ -20,6 +21,7 @@ func NewProcessor(storeType string, processRules *rules.Rules) (*Process, error)
 	return &Process{
 		rules: processRules,
 		Store: s,
+		Debug: debug,
 	}, nil
 }
 

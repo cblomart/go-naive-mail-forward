@@ -61,7 +61,7 @@ func main() {
 	defer listen.Close()
 
 	// create the processor
-	p, err := process.NewProcessor(storage, f)
+	p, err := process.NewProcessor(storage, f, debug)
 	if err != nil {
 		log.Fatalln(err.Error())
 	}

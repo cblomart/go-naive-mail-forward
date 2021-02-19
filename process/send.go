@@ -18,7 +18,7 @@ func (p *Process) Send() {
 	}
 	log.Printf("smtp - sending %d messages to %s", len(messages), relay)
 	// send mesages
-	_, err = smtpclient.Send(relay, messages)
+	_, err = smtpclient.Send(relay, messages, p.Debug)
 }
 
 func (p *Process) calculateQueue() (string, []message.Message, error) {
