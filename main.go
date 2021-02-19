@@ -26,8 +26,8 @@ func init() {
 	flag.BoolVar(&debug, "d", false, "show debug messages")
 	flag.StringVar(&servername, "servername", "localhost", "hostname we are serving")
 	flag.StringVar(&servername, "n", "localhost", "hostname we are serving")
-	flag.StringVar(&storage, "storage", "localhost", "storage connection")
-	flag.StringVar(&storage, "s", "localhost", "storage connection")
+	flag.StringVar(&storage, "storage", "memory", "storage connection")
+	flag.StringVar(&storage, "s", "memory", "storage connection")
 	flag.IntVar(&port, "port", 25, "port to listen to")
 	flag.IntVar(&port, "p", 25, "port to listen to")
 }

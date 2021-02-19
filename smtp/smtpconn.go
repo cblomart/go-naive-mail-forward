@@ -21,9 +21,12 @@ const (
 	STATUSTMPER  = 451
 	STATUSERROR  = 500
 	STATUSNOTIMP = 502
+	STATUSBADSEC = 503
 	STATUSNOACK  = 521
+	STATUSNOPOL  = 550
 	STATUSNOSTOR = 552
 	fqdnMatch    = "^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$"
+	emailMatch   = "^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
 )
 
 //SmtpConn is a smtp client connection
@@ -35,6 +38,9 @@ type SmtpConn struct {
 	Debug      bool
 	from       string
 	to         string
+	touser     string
+	todomain   string
+	mx         string
 	msgStore   store.Store
 }
 
@@ -55,6 +61,24 @@ func NewSmtpConn(conn net.Conn, store store.Store) *SmtpConn {
 		Debug:      false,
 		msgStore:   store,
 	}
+}
+
+// isEmailValid checks if the email provided passes the required structure
+// and length test. It also checks the domain has a valid MX record.
+func isEmailValid(mail string) (string, string, string, bool) {
+	if len(mail) < 3 && len(mail) > 254 {
+		return "", "", "", false
+	}
+	match, err := regexp.MatchString(emailMatch, mail)
+	if err != nil || !match {
+		return "", "", "", false
+	}
+	parts := strings.Split(mail, "@")
+	mx, err := net.LookupMX(parts[1])
+	if err != nil || len(mx) == 0 {
+		return "", "", "", false
+	}
+	return parts[0], parts[1], mx[0].Host, true
 }
 
 func (conn *SmtpConn) Close() error {
@@ -95,28 +119,28 @@ func (conn *SmtpConn) ProcessMessages() {
 		case "RSET":
 			if !conn.hello {
 				log.Printf("server - %s: reset without hello\n", conn.showClient())
-				err = conn.send(STATUSNOACK, "no hello")
+				err = conn.send(STATUSBADSEC, "no hello")
 				return
 			}
 			err = conn.rset()
 		case "MAIL FROM":
 			if !conn.hello {
 				log.Printf("server - %s: recipient without hello\n", conn.showClient())
-				err = conn.send(STATUSNOACK, "no hello")
+				err = conn.send(STATUSBADSEC, "no hello")
 				return
 			}
 			err = conn.mailfrom(params)
 		case "RCPT TO":
 			if !conn.hello {
 				log.Printf("server - %s: recipient without hello\n", conn.showClient())
-				err = conn.send(STATUSNOACK, "no hello")
+				err = conn.send(STATUSBADSEC, "no hello")
 				return
 			}
 			err = conn.rcptto(params)
 		case "DATA":
 			if !conn.hello {
 				log.Printf("server - %s: recipient without hello\n", conn.showClient())
-				err = conn.send(STATUSNOACK, "no hello")
+				err = conn.send(STATUSBADSEC, "no hello")
 				return
 			}
 			err = conn.data()
@@ -188,6 +212,11 @@ func (conn *SmtpConn) rset() error {
 
 func (conn *SmtpConn) mailfrom(param string) error {
 	param = strings.Trim(param, "<>")
+	_, _, _, valid := isEmailValid(param)
+	if !valid {
+		log.Printf("server - %s: mail from %s not valid", conn.showClient(), param)
+		return conn.send(STATUSNOPOL, "bad mail address")
+	}
 	log.Printf("server - %s: mail from %s", conn.showClient(), param)
 	conn.from = param
 	return conn.send(STATUSOK, "ok")
@@ -195,8 +224,16 @@ func (conn *SmtpConn) mailfrom(param string) error {
 
 func (conn *SmtpConn) rcptto(param string) error {
 	param = strings.Trim(param, "<>")
+	user, domain, mx, valid := isEmailValid(param)
+	if !valid {
+		log.Printf("server - %s: mail to %s not valid", conn.showClient(), param)
+		return conn.send(STATUSNOPOL, "bad mail address")
+	}
 	log.Printf("server - %s: sending to %s", conn.showClient(), param)
 	conn.to = param
+	conn.touser = user
+	conn.todomain = domain
+	conn.mx = mx
 	return conn.send(STATUSOK, "ok")
 }
 
@@ -208,7 +245,7 @@ func (conn *SmtpConn) data() error {
 	if len(conn.from) == 0 || len(conn.to) == 0 {
 		// not ready to recieve a mail - i don't know where it goes!
 		log.Printf("server - %s: refusing data without 'from' and 'to'", conn.showClient())
-		return conn.send(STATUSTMPER, "please tell me from/to before sending a message")
+		return conn.send(STATUSBADSEC, "please tell me from/to before sending a message")
 	}
 	err := conn.send(STATUSOK, "shoot")
 	if err != nil {
@@ -239,9 +276,12 @@ func (conn *SmtpConn) data() error {
 	}
 	// save to storage
 	msg := &message.Message{
-		From: conn.from,
-		To:   conn.to,
-		Data: sb.String(),
+		From:     conn.from,
+		To:       conn.to,
+		Data:     sb.String(),
+		ToUser:   conn.touser,
+		ToDomain: conn.todomain,
+		MX:       conn.mx,
 	}
 	msgId, err := conn.msgStore.Add(msg)
 	if err != nil {
