@@ -28,6 +28,9 @@ func (m Memory) Add(msg message.Message) (string, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.messages[id] = msg
+	if _, ok := m.infos[msg.MX]; !ok {
+		m.infos[msg.MX] = make([]string, 0)
+	}
 	m.infos[msg.MX] = append(m.infos[msg.MX], id)
 	log.Printf("storage - added message %s", id)
 	var sb strings.Builder
