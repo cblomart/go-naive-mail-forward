@@ -1,9 +1,9 @@
 package main
 
 import (
+	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/rules"
 	"cblomart/go-naive-mail-forward/smtp"
-	"cblomart/go-naive-mail-forward/store"
 	"flag"
 	"fmt"
 	"log"
@@ -60,12 +60,12 @@ func main() {
 	}
 	defer listen.Close()
 
-	// create the store
-	s, err := store.NewStore(storage, f)
+	// create the processor
+	p, err := process.NewProcessor(storage, f)
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
-	log.Printf("Instantiated %s storage\n", s.Type())
+	log.Printf("Instantiated process with %s storage\n", p.Store.Type())
 
 	// start scheduled storage send process
 	d, err := time.ParseDuration(interval)
@@ -78,7 +78,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				go smtp.Send(s)
+				go smtp.Send(p.Store)
 			case <-quit:
 				ticker.Stop()
 				return
@@ -93,6 +93,6 @@ func main() {
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		go smtp.HandleSmtpConn(conn, servername, s, domains, debug)
+		go smtp.HandleSmtpConn(conn, servername, p, domains, debug)
 	}
 }

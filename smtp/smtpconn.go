@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"cblomart/go-naive-mail-forward/address"
 	"cblomart/go-naive-mail-forward/message"
-	"cblomart/go-naive-mail-forward/store"
+	"cblomart/go-naive-mail-forward/process"
 	"fmt"
 	"io"
 	"log"
@@ -37,19 +37,19 @@ type SmtpConn struct {
 	Debug      bool
 	mailFrom   *address.MailAddress
 	rcptTo     []address.MailAddress
-	msgStore   store.Store
+	processor  *process.Process
 	domains    []string
 }
 
 var DomainMatch = regexp.MustCompile("^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$")
 
-func HandleSmtpConn(tcpConn net.Conn, serverName string, store store.Store, domains []string, debug bool) {
-	smtpConn := NewSmtpConn(tcpConn, serverName, store, domains, debug)
+func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, debug bool) {
+	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, debug)
 	defer smtpConn.Close()
 	smtpConn.ProcessMessages()
 }
 
-func NewSmtpConn(conn net.Conn, serverName string, store store.Store, domains []string, debug bool) *SmtpConn {
+func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, debug bool) *SmtpConn {
 	return &SmtpConn{
 		conn:       conn,
 		hello:      false,
@@ -58,7 +58,7 @@ func NewSmtpConn(conn net.Conn, serverName string, store store.Store, domains []
 		Debug:      debug,
 		mailFrom:   nil,
 		rcptTo:     make([]address.MailAddress, 0),
-		msgStore:   store,
+		processor:  processor,
 		domains:    domains,
 	}
 }
@@ -281,7 +281,7 @@ func (conn *SmtpConn) data() error {
 		To:   conn.rcptTo,
 		Data: sb.String(),
 	}
-	msgId, err := conn.msgStore.Add(msg)
+	msgId, err := conn.processor.Add(msg)
 	if err != nil {
 		log.Printf("server - %s: error saving message: %s", conn.showClient(), err.Error())
 		return conn.send(STATUSNOSTOR, "cannot save message")

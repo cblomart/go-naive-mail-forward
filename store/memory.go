@@ -2,7 +2,6 @@ package store
 
 import (
 	"cblomart/go-naive-mail-forward/message"
-	"cblomart/go-naive-mail-forward/rules"
 	"fmt"
 	"log"
 	"sync"
@@ -11,14 +10,12 @@ import (
 type Memory struct {
 	messages map[string]message.Message
 	lock     *sync.Mutex
-	rules    *rules.Rules
 }
 
-func NewMemoryStore(rules *rules.Rules) Memory {
+func NewMemoryStore() Memory {
 	return Memory{
 		lock:     &sync.Mutex{},
 		messages: make(map[string]message.Message),
-		rules:    rules,
 	}
 }
 
@@ -29,8 +26,6 @@ func (m Memory) Add(msg message.Message) (string, error) {
 	}
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	// updating to from rules
-	m.rules.UpdateMessage(&msg)
 	m.messages[msg.Id] = msg
 	log.Printf("storage - added message %s", msg.Id)
 	return msg.Id, nil
