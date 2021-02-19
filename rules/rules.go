@@ -95,7 +95,7 @@ func NewRule(rule string) (*Rule, error) {
 	if len(fromParts[0]) == 0 {
 		fromParts[0] = "*"
 	}
-	r.FromUser = regexp.MustCompile(strings.Replace(fromParts[0], "*", "[0-9A-Za-z_])", -1))
+	r.FromUser = regexp.MustCompile(strings.Replace(fromParts[0], "*", "[0-9A-Za-z_]*", -1))
 	r.To = []address.MailAddress{}
 	for _, addr := range parts[1:] {
 		ma, err := address.NewMailAddress(addr)
