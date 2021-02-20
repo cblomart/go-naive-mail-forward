@@ -239,18 +239,8 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	okChan := make(chan bool, len(targetSmtp))
 	// start gofunc to send messages
 	for _, i := range targetSmtp {
-		client := p.smtpPool[i]
-		go func() {
-			defer wg.Done()
-			err := client.SendMessage(msg)
-			if err != nil {
-				log.Printf("process - %s: could not send via %s: %s", msg.Id, client.Relay, err.Error())
-				okChan <- false
-				return
-			}
-			log.Printf("process - %s: sent via %s", msg.Id, client.Relay)
-			okChan <- true
-		}()
+		//client := p.smtpPool[i]
+		go SendAsync(p.smtpPool[i], msg, &wg, okChan)
 	}
 	// wait for messages to be sent
 	wg.Wait()
@@ -266,4 +256,16 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 		return msg.Id, fmt.Errorf("could not send message to all relays")
 	}
 	return msg.Id, nil
+}
+
+func SendAsync(client smtpclient.SmtpClient, msg message.Message, wg *sync.WaitGroup, okChan chan bool) {
+	defer wg.Done()
+	err := client.SendMessage(msg)
+	if err != nil {
+		log.Printf("process - %s: could not send via %s: %s", msg.Id, client.Relay, err.Error())
+		okChan <- false
+		return
+	}
+	log.Printf("process - %s: sent via %s", msg.Id, client.Relay)
+	okChan <- true
 }
