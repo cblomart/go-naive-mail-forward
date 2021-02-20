@@ -127,7 +127,10 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	log.Printf("process - %s: waiting for smtp pool lock", msg.Id)
 	// lock the pool
 	p.poolLock.Lock()
-	defer p.poolLock.Unlock()
+	defer func() {
+		log.Printf("process - %s: unlocking pool", msg.Id)
+		p.poolLock.Unlock()
+	}()
 	log.Printf("process - %s: processing message", msg.Id)
 	// get targeted domains
 	domains := msg.Domains()
