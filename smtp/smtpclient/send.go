@@ -26,8 +26,6 @@ type SmtpClient struct {
 }
 
 func (c *SmtpClient) Connect() error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:25", c.Relay))
 	if err != nil {
 		return err
@@ -43,6 +41,10 @@ func (c *SmtpClient) Connect() error {
 	if c.lock == nil {
 		c.lock = &sync.Mutex{}
 	}
+	// lock while waiting aknownledgement from server
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	// read ack from server
 	_, err = c.readLine(smtp.STATUSRDY)
 	if err != nil {
 		c.Quit()
