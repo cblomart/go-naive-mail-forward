@@ -201,9 +201,10 @@ func (c *SmtpClient) Data(data string) error {
 }
 
 func (c *SmtpClient) SendMessage(msg message.Message) error {
+	log.Printf("client - %s:%s: message %s waiting on client lock", c.LocalPort, c.Relay, msg.Id)
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	log.Printf("client - %s:%s:%s sending message", c.LocalPort, c.Relay, msg.Id)
+	log.Printf("client - %s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
 	// sent mail from
 	err := c.MailFrom(msg.From.String())
 	if err != nil {
