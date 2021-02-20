@@ -116,6 +116,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	}
 	// update recipients following rules
 	p.rules.UpdateMessage(&msg)
+	log.Printf("process - %s: mapping smtp relays to send to", msg.Id)
 	// lock the pool
 	p.poolLock.Lock()
 	defer p.poolLock.Unlock()
@@ -145,6 +146,10 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 			}
 		}
 	}
+	if p.Debug {
+		log.Printf("process - %s: domains: %s", msg.Id, strings.Join(domains, ", "))
+		log.Printf("process - %s: matched domains index: %+q", msg.Id, matchedDomains)
+	}
 	// remove matched domains from list
 	for _, i := range matchedDomains {
 		domains[i] = domains[len(domains)-1]
@@ -155,7 +160,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 		// mail exchangers for domain
 		mxs, err := net.LookupMX(domain)
 		if err != nil {
-			log.Println("process - %s: could not find mx for %s", msg.Id, domain)
+			log.Printf("process - %s: could not find mx for %s", msg.Id, domain)
 		}
 		// match mail exchanger against pool
 		targetFound := false
