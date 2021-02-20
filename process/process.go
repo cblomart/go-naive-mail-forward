@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -79,6 +80,7 @@ func (p *Process) cleanPool() {
 			toRemove = append(toRemove, i)
 		}
 	}
+	sort.Sort(sort.Reverse(sort.IntSlice(toRemove)))
 	for _, i := range toRemove {
 		if p.smtpPool[i].Connected {
 			p.smtpPool[i].Close()
@@ -150,6 +152,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 		log.Printf("process - %s: domains: %s", msg.Id, strings.Join(domains, ", "))
 		log.Printf("process - %s: matched domains index: %+q", msg.Id, matchedDomains)
 	}
+	sort.Sort(sort.Reverse(sort.IntSlice(matchedDomains)))
 	// remove matched domains from list
 	for _, i := range matchedDomains {
 		domains[i] = domains[len(domains)-1]
@@ -199,13 +202,13 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 			// connect to server
 			err = client.Connect()
 			if err != nil {
-				log.Printf("process - %s: could not connect to mx %s for %s", msg.Id, mx, domain)
+				log.Printf("process - %s: could not connect to mx %s for %s", msg.Id, mx.Host, domain)
 				continue
 			}
 			// present ourselves
 			err = client.Helo()
 			if err != nil {
-				log.Printf("process - %s: not welcomed by mx %s for %s", msg.Id, mx, domain)
+				log.Printf("process - %s: not welcomed by mx %s for %s", msg.Id, mx.Host, domain)
 				continue
 			}
 			// add client to the pool
