@@ -224,14 +224,36 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 			log.Printf("process - %s: could not connect to any mx for %s", msg.Id, domain)
 		}
 	}
-	// we should have a proper list of where to send the messages
-	// failing if all failed
-	err := fmt.Errorf("no target relay idenified")
+	// create a waitgroup for client sends
+	var wg sync.WaitGroup
+	wg.Add(len(targetSmtp))
+	// channel to recieve results
+	okChan := make(chan bool, len(targetSmtp))
+	// start gofunc to send messages
 	for _, i := range targetSmtp {
-		smtperr := p.smtpPool[i].SendMessage(msg)
-		if smtperr == nil {
-			err = nil
+		go func() {
+			defer wg.Done()
+			err := p.smtpPool[i].SendMessage(msg)
+			if err != nil {
+				log.Printf("process - %s: could not send via %s: %s", msg.Id, p.smtpPool[i].Relay, err.Error())
+				okChan <- false
+				return
+			}
+			okChan <- true
+		}()
+	}
+	// wait for messages to be sent
+	wg.Wait()
+	// evaluate result
+	result := false
+	for res := range okChan {
+		if res {
+			result = true
 		}
 	}
-	return msg.Id, err
+	// return result
+	if !result {
+		return msg.Id, fmt.Errorf("could not send message to all relays")
+	}
+	return msg.Id, nil
 }
