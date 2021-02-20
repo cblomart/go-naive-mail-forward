@@ -24,13 +24,16 @@ type Process struct {
 }
 
 func NewProcessor(hostname string, processRules *rules.Rules, debug bool) (*Process, error) {
-	return &Process{
+	process := &Process{
 		smtpPool: []smtpclient.SmtpClient{},
 		poolLock: sync.Mutex{},
 		rules:    processRules,
 		Debug:    debug,
 		Hostname: hostname,
-	}, nil
+	}
+	// start pool management
+	go process.ManagePools()
+	return process, nil
 }
 
 func (p *Process) ManagePools() {
