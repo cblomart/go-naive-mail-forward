@@ -74,13 +74,14 @@ func (rs *Rules) UpdateMessage(msg *message.Message) {
 	for i, to := range msg.To {
 		rcptTo[i] = to.String()
 	}
-	log.Printf("rules - %s: original recipients: %s", msg.Id, strings.Join(rcptTo, ";"))
+	original := strings.Join(rcptTo, ";")
 	msg.To = rs.Evaluate(msg.To)
 	rcptTo = make([]string, len(msg.To))
 	for i, to := range msg.To {
 		rcptTo[i] = to.String()
 	}
-	log.Printf("rules - %s: updated recipients: %s", msg.Id, strings.Join(rcptTo, ";"))
+	updated := strings.Join(rcptTo, ";")
+	log.Printf("rules - %s: forwarding: %s > %s", msg.Id, original, updated)
 }
 
 type Rule struct {

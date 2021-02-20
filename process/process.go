@@ -121,7 +121,9 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	}
 	// update recipients following rules
 	p.rules.UpdateMessage(&msg)
-	log.Printf("process - %s: mapping smtp relays to send to", msg.Id)
+	if p.Debug {
+		log.Printf("process - %s: mapping smtp relays to send to", msg.Id)
+	}
 	// lock the pool
 	p.poolLock.Lock()
 	defer p.poolLock.Unlock()
@@ -218,6 +220,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 			p.smtpPool = append(p.smtpPool, *client)
 			targetSmtp = append(targetSmtp, len(p.smtpPool)-1)
 			added = true
+			log.Printf("process - %s: connected to mx %s for %s", msg.Id, mx.Host, domain)
 			break
 		}
 		if !added {
@@ -240,6 +243,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 				okChan <- false
 				return
 			}
+			log.Printf("process - %s: sent via %s", msg.Id, p.smtpPool[i].Relay)
 			okChan <- true
 		}()
 	}

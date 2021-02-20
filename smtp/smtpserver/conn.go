@@ -13,6 +13,8 @@ import (
 	"net/textproto"
 	"regexp"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 //Conn is a smtp client connection
@@ -55,7 +57,9 @@ func (conn *Conn) Close() error {
 }
 
 func (conn *Conn) ProcessMessages() {
-	log.Printf("%s: a new contender has arrived\n", conn.showClient())
+	if conn.Debug {
+		log.Printf("server - %s: new connection\n", conn.showClient())
+	}
 	// acknowlege the new comer
 	err := conn.ack()
 	if err != nil {
@@ -163,7 +167,9 @@ func (conn *Conn) helo(hostname string) (bool, error) {
 	}
 	conn.hello = true
 	conn.clientName = hostname
-	log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
+	if conn.Debug {
+		log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
+	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
@@ -172,7 +178,9 @@ func (conn *Conn) noop() error {
 }
 
 func (conn *Conn) rset() error {
-	log.Printf("server - %s: reseting smtp.STATUS", conn.showClient())
+	if conn.Debug {
+		log.Printf("server - %s: reseting status", conn.showClient())
+	}
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
 	return conn.send(smtp.STATUSOK, "ok")
@@ -184,7 +192,9 @@ func (conn *Conn) mailfrom(param string) error {
 		log.Printf("server - %s: mail from %s not valid", conn.showClient(), ma)
 		return conn.send(smtp.STATUSNOPOL, "bad mail address")
 	}
-	log.Printf("server - %s: mail from %s", conn.showClient(), ma)
+	if conn.Debug {
+		log.Printf("server - %s: mail from %s", conn.showClient(), ma)
+	}
 	conn.mailFrom = ma
 	conn.rcptTo = make([]address.MailAddress, 0)
 	return conn.send(smtp.STATUSOK, "ok")
@@ -222,7 +232,9 @@ func (conn *Conn) rcptto(param string) error {
 	for i, ma := range conn.rcptTo {
 		addresses[i] = ma.String()
 	}
-	log.Printf("server - %s: sending to %s", conn.showClient(), strings.Join(addresses, ";"))
+	if conn.Debug {
+		log.Printf("server - %s: sending to %s", conn.showClient(), strings.Join(addresses, ";"))
+	}
 	return conn.send(smtp.STATUSOK, "ok")
 }
 
@@ -266,16 +278,21 @@ func (conn *Conn) data() error {
 	}
 	// save to storage
 	msg := message.Message{
+		Id:   uuid.Future.String(),
 		From: conn.mailFrom,
 		To:   conn.rcptTo,
 		Data: sb.String(),
 	}
+	addresses := make([]string, len(msg.To))
+	for i, ma := range msg.To {
+		addresses[i] = ma.String()
+	}
+	log.Printf("server - %s: message %s (%d bytes) to %v", conn.showClient(), msg.Id, sb.Len(), strings.Join(addresses, ", "))
 	msgId, err := conn.processor.Handle(msg)
 	if err != nil {
-		log.Printf("server - %s: error handling message: %s", conn.showClient(), err.Error())
+		log.Printf("server - %s:%s: error handling message: %s", conn.showClient(), msgId, err.Error())
 		return conn.send(smtp.STATUSTMPER, "could not handle message")
 	}
-	log.Printf("server - %s: recieved mail %s (%d bytes)", conn.showClient(), msgId, sb.Len())
 	return conn.send(smtp.STATUSOK, "recieved 5/5")
 }
 
