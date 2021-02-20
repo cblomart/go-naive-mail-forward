@@ -148,11 +148,11 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 			}
 		}
 	}
+	sort.Sort(sort.Reverse(sort.IntSlice(matchedDomains)))
 	if p.Debug {
 		log.Printf("process - %s: domains: %s", msg.Id, strings.Join(domains, ", "))
-		log.Printf("process - %s: matched domains index: %+q", msg.Id, matchedDomains)
+		log.Printf("process - %s: matched domains index: %v", msg.Id, matchedDomains)
 	}
-	sort.Sort(sort.Reverse(sort.IntSlice(matchedDomains)))
 	// remove matched domains from list
 	for _, i := range matchedDomains {
 		domains[i] = domains[len(domains)-1]
