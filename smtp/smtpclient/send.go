@@ -128,6 +128,40 @@ func (c *SmtpClient) RcptTo(dest string) error {
 	return nil
 }
 
+func (c *SmtpClient) Data(data string) error {
+	err := c.sendCmd("DATA")
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSACT)
+	if err != nil {
+		c.Quit()
+		return err
+	}
+	// sending data
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if c.Debug {
+			log.Printf("client - %s:%s: > %s", c.LocalPort, c.Relay, line)
+		}
+		_, err := fmt.Fprintf(c.conn, "%s\r\n", line)
+		if err != nil {
+			return err
+		}
+	}
+	_, err = fmt.Fprint(c.conn, ".\r\n")
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSOK)
+	if err != nil {
+		c.Quit()
+		return err
+	}
+	return nil
+}
+
 func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]string, error) {
 	// create smtp client
 	client := &SmtpClient{
@@ -146,6 +180,8 @@ func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]
 		return nil, err
 	}
 	// loop over the messages
+	// recover ids of sent messages
+	ids := make([]string, 0)
 	// prepare relay for fqdn check
 	upperRelay := strings.ToUpper(strings.TrimRight(client.Relay, "."))
 	for _, msg := range msgs {
@@ -180,9 +216,15 @@ func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]
 			log.Printf("client - %s:%s:%s no recipient added for message", client.LocalPort, client.Relay, msg.Id)
 			continue
 		}
-		// need to send data!
+		err = client.Data(msg.Data)
+		if err != nil {
+			log.Printf("client - %s:%s:%s %s", client.LocalPort, client.Relay, msg.Id, err.Error())
+			continue
+		}
+		// message sent :)
+		ids = append(ids, msg.Id)
 	}
 	// close connection on exit
 	defer client.Close()
-	return nil, nil
+	return ids, nil
 }
