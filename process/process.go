@@ -124,9 +124,11 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	if p.Debug {
 		log.Printf("process - %s: mapping smtp relays to send to", msg.Id)
 	}
+	log.Printf("process - %s: waiting for smtp pool lock", msg.Id)
 	// lock the pool
 	p.poolLock.Lock()
 	defer p.poolLock.Unlock()
+	log.Printf("process - %s: processing message", msg.Id)
 	// get targeted domains
 	domains := msg.Domains()
 	// list the pools to run the message to
