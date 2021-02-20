@@ -262,6 +262,7 @@ func (conn *Conn) data() error {
 			break
 		}
 		sb.WriteString(line)
+		sb.WriteString("\r\n")
 	}
 	// save to storage
 	msg := message.Message{

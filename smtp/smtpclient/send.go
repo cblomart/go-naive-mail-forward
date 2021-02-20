@@ -150,6 +150,9 @@ func (c *SmtpClient) Data(data string) error {
 			return err
 		}
 	}
+	if c.Debug {
+		log.Printf("client - %s:%s: > .", c.LocalPort, c.Relay)
+	}
 	_, err = fmt.Fprint(c.conn, ".\r\n")
 	if err != nil {
 		return err
