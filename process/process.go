@@ -197,10 +197,17 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 				log.Printf("process - %s: could not connect to mx %s for %s", msg.Id, mx, domain)
 				continue
 			}
+			// present ourselves
+			err = client.Helo()
+			if err != nil {
+				log.Printf("process - %s: not welcomed by mx %s for %s", msg.Id, mx, domain)
+				continue
+			}
 			// add client to the pool
 			p.smtpPool = append(p.smtpPool, *client)
 			targetSmtp = append(targetSmtp, len(p.smtpPool)-1)
 			added = true
+			break
 		}
 		if !added {
 			log.Printf("process - %s: could not connect to any mx for %s", msg.Id, domain)
