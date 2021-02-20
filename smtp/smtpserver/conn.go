@@ -278,7 +278,7 @@ func (conn *Conn) data() error {
 	}
 	// save to storage
 	msg := message.Message{
-		Id:   uuid.Future.String(),
+		Id:   uuid.NewString(),
 		From: conn.mailFrom,
 		To:   conn.rcptTo,
 		Data: sb.String(),

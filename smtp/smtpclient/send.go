@@ -218,7 +218,9 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 	}
 	// prepare relay for fqdn check
 	for _, to := range tos {
-		log.Printf("client - %s:%s:%s adding recipient %s", c.LocalPort, c.Relay, msg.Id, to)
+		if c.Debug {
+			log.Printf("client - %s:%s:%s adding recipient %s", c.LocalPort, c.Relay, msg.Id, to)
+		}
 		err = c.RcptTo(to)
 		if err != nil {
 			log.Printf("client - %s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())

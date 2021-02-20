@@ -239,11 +239,11 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 			defer wg.Done()
 			err := client.SendMessage(msg)
 			if err != nil {
-				log.Printf("process - %s: could not send via %s: %s", msg.Id, p.smtpPool[i].Relay, err.Error())
+				log.Printf("process - %s: could not send via %s: %s", msg.Id, client.Relay, err.Error())
 				okChan <- false
 				return
 			}
-			log.Printf("process - %s: sent via %s", msg.Id, p.smtpPool[i].Relay)
+			log.Printf("process - %s: sent via %s", msg.Id, client.Relay)
 			okChan <- true
 		}()
 	}
