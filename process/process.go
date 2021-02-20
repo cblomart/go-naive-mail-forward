@@ -231,9 +231,10 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	okChan := make(chan bool, len(targetSmtp))
 	// start gofunc to send messages
 	for _, i := range targetSmtp {
+		client := p.smtpPool[i]
 		go func() {
 			defer wg.Done()
-			err := p.smtpPool[i].SendMessage(msg)
+			err := client.SendMessage(msg)
 			if err != nil {
 				log.Printf("process - %s: could not send via %s: %s", msg.Id, p.smtpPool[i].Relay, err.Error())
 				okChan <- false
