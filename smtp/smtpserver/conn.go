@@ -270,10 +270,10 @@ func (conn *Conn) data() error {
 		To:   conn.rcptTo,
 		Data: sb.String(),
 	}
-	msgId, err := conn.processor.Add(msg)
+	msgId, err := conn.processor.Handle(msg)
 	if err != nil {
-		log.Printf("server - %s: error saving message: %s", conn.showClient(), err.Error())
-		return conn.send(smtp.STATUSNOSTOR, "cannot save message")
+		log.Printf("server - %s: error handling message: %s", conn.showClient(), err.Error())
+		return conn.send(smtp.STATUSTMPER, "could not handle message")
 	}
 	log.Printf("server - %s: recieved mail %s (%d bytes)", conn.showClient(), msgId, sb.Len())
 	return conn.send(smtp.STATUSOK, "recieved 5/5")

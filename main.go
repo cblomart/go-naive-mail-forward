@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"strings"
-	"time"
 )
 
 const (
@@ -46,11 +45,11 @@ func main() {
 	flag.Parse()
 
 	// get the rules
-	f, err := rules.NewRules(forwards)
+	forwardRules, err := rules.NewRules(forwards)
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
-	domains := f.GetValidDomains()
+	domains := forwardRules.GetValidDomains()
 	log.Printf("accepting domains: %s", strings.Join(domains, ", "))
 
 	// listen to port 25 (smtp)
@@ -61,30 +60,10 @@ func main() {
 	defer listen.Close()
 
 	// create the processor
-	p, err := process.NewProcessor(servername, storage, f, debug)
+	msgProcessor, err := process.NewProcessor(servername, forwardRules, debug)
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
-	log.Printf("Instantiated process with %s storage\n", p.Store.Type())
-
-	// start scheduled storage send process
-	d, err := time.ParseDuration(interval)
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
-	ticker := time.NewTicker(d)
-	quit := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				go p.Send()
-			case <-quit:
-				ticker.Stop()
-				return
-			}
-		}
-	}()
 
 	//handle connections
 	log.Printf("Listining on %s:%d and waiting for connections\n", servername, port)
@@ -93,6 +72,6 @@ func main() {
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		go smtpserver.HandleSmtpConn(conn, servername, p, domains, debug)
+		go smtpserver.HandleSmtpConn(conn, servername, msgProcessor, domains, debug)
 	}
 }

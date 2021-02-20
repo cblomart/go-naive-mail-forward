@@ -9,17 +9,25 @@ import (
 	"net"
 	"net/textproto"
 	"strings"
+	"sync"
+	"time"
 )
 
 type SmtpClient struct {
 	conn      net.Conn
 	LocalPort string
 	Relay     string
+	Domains   []string
 	Hostname  string
 	Debug     bool
+	lock      *sync.Mutex
+	Connected bool
+	LastSent  time.Time
 }
 
 func (c *SmtpClient) Connect() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:25", c.Relay))
 	if err != nil {
 		return err
@@ -31,19 +39,27 @@ func (c *SmtpClient) Connect() error {
 		log.Printf("client - %s:%s: connected", c.LocalPort, c.Relay)
 	}
 	c.conn = conn
+	// create the lock if empty as connection is established
+	if c.lock == nil {
+		c.lock = &sync.Mutex{}
+	}
 	_, err = c.readLine(smtp.STATUSRDY)
 	if err != nil {
 		c.Quit()
 		return err
 	}
+	c.Connected = true
 	return nil
 }
 
 func (c *SmtpClient) Close() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	if c.Debug {
 		log.Printf("client - disconnecting from %s", c.Relay)
 	}
 	if c.conn != nil {
+		c.Connected = false
 		c.Quit()
 		return c.conn.Close()
 	}
@@ -90,7 +106,24 @@ func (c *SmtpClient) Quit() error {
 }
 
 func (c *SmtpClient) Helo() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	err := c.sendCmd(fmt.Sprintf("HELO %s", c.Hostname))
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSOK)
+	if err != nil {
+		c.Quit()
+		return err
+	}
+	return nil
+}
+
+func (c *SmtpClient) Noop() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	err := c.sendCmd("NOOP")
 	if err != nil {
 		return err
 	}
@@ -165,18 +198,61 @@ func (c *SmtpClient) Data(data string) error {
 	return nil
 }
 
-func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]string, error) {
+func (c *SmtpClient) SendMessage(msg message.Message) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	log.Printf("client - %s:%s:%s sending message", c.LocalPort, c.Relay, msg.Id)
+	// sent mail from
+	err := c.MailFrom(msg.From.String())
+	if err != nil {
+		log.Printf("client - %s:%s:%s: %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+		return err
+	}
+	// get recipients for domains
+	tos := msg.ToDomains(c.Domains)
+	if len(tos) == 0 {
+		log.Printf("client - %s:%s:%s no recipient for the message in %s", c.LocalPort, c.Relay, msg.Id, strings.Join(c.Domains, ", "))
+		return fmt.Errorf("no recipients in domains")
+	}
+	// prepare relay for fqdn check
+	for _, to := range tos {
+		log.Printf("client - %s:%s:%s adding recipient %s", c.LocalPort, c.Relay, msg.Id, to)
+		err = c.RcptTo(to)
+		if err != nil {
+			log.Printf("client - %s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			continue
+		}
+	}
+	err = c.Data(msg.Data)
+	if err != nil {
+		log.Printf("client - %s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+		return err
+	}
+	c.LastSent = time.Now()
+	return nil
+}
+
+func SendMessages(hostname string, domain string, msgs []message.Message, debug bool) ([]string, error) {
+	// lookup first mx for domain
+	// mail exchangers must be known
+	mxs, err := net.LookupMX(domain)
+	if err != nil {
+		return nil, err
+	}
 	// create smtp client
 	client := &SmtpClient{
-		Relay:    relay,
+		Relay:    mxs[0].Host,
+		Domains:  []string{domain},
 		Debug:    debug,
 		Hostname: hostname,
 	}
 	// connect to server
-	err := client.Connect()
+	err = client.Connect()
 	if err != nil {
 		return nil, err
 	}
+	// close connection on exit
+	defer client.Close()
 	// hello server
 	err = client.Helo()
 	if err != nil {
@@ -185,41 +261,8 @@ func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]
 	// loop over the messages
 	// recover ids of sent messages
 	ids := make([]string, 0)
-	// prepare relay for fqdn check
-	upperRelay := strings.ToUpper(strings.TrimRight(client.Relay, "."))
 	for _, msg := range msgs {
-		log.Printf("client - %s:%s:%s sending message", client.LocalPort, client.Relay, msg.Id)
-		// sent mail from
-		err = client.MailFrom(msg.From.String())
-		if err != nil {
-			log.Printf("client - %s:%s:%s: %s", client.LocalPort, client.Relay, msg.Id, err.Error())
-			continue
-		}
-		rcptSet := false
-		for _, to := range msg.To {
-			// check if relay in mx for recipient
-			found := false
-			for _, mx := range to.MX {
-				if strings.ToUpper(strings.TrimRight(mx, ".")) == upperRelay {
-					found = true
-					break
-				}
-			}
-			if found {
-				log.Printf("client - %s:%s:%s adding recipient %s for relay", client.LocalPort, client.Relay, msg.Id, to.String())
-				err = client.RcptTo(to.String())
-				if err != nil {
-					log.Printf("client - %s:%s:%s %s", client.LocalPort, client.Relay, msg.Id, err.Error())
-					continue
-				}
-				rcptSet = true
-			}
-		}
-		if !rcptSet {
-			log.Printf("client - %s:%s:%s no recipient added for message", client.LocalPort, client.Relay, msg.Id)
-			continue
-		}
-		err = client.Data(msg.Data)
+		err := client.SendMessage(msg)
 		if err != nil {
 			log.Printf("client - %s:%s:%s %s", client.LocalPort, client.Relay, msg.Id, err.Error())
 			continue
@@ -227,7 +270,5 @@ func Send(hostname string, relay string, msgs []message.Message, debug bool) ([]
 		// message sent :)
 		ids = append(ids, msg.Id)
 	}
-	// close connection on exit
-	defer client.Close()
 	return ids, nil
 }
