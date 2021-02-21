@@ -129,11 +129,16 @@ func (conn *Conn) ProcessMessages() {
 }
 
 func (conn *Conn) showClient() string {
+	// get the port we are connected to
+	port := ""
+	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
+	if ok {
+		port = fmt.Sprintf(":%d", tcpaddr.Port)
+	}
 	if len(conn.clientName) == 0 {
 		return conn.conn.RemoteAddr().String()
 	}
-	infos := strings.Split(conn.conn.RemoteAddr().String(), ":")
-	return fmt.Sprintf("%s:%s", conn.clientName, infos[len(infos)-1])
+	return fmt.Sprintf("%s%s", conn.clientName, port)
 }
 
 func (conn *Conn) send(status int, message string) error {
@@ -259,11 +264,22 @@ func (conn *Conn) data() error {
 	// get a text proto reader
 	tp := textproto.NewReader(reader)
 	var sb strings.Builder
+	// get addresses of local and remote servers
+	remoteaddr := conn.clientName
+	ipaddr, ok := conn.conn.RemoteAddr().(*net.IPAddr)
+	if ok {
+		remoteaddr += fmt.Sprintf(" (%s)", ipaddr.String())
+	}
+	localaddr := conn.clientName
+	ipaddr, ok = conn.conn.LocalAddr().(*net.IPAddr)
+	if ok {
+		localaddr += fmt.Sprintf(" (%s)", ipaddr.String())
+	}
 	// prepare trace line
 	trace := fmt.Sprintf(
-		"Received: from %s (%s) by %s (%s) with Golang Naive Mail Forwarder id %s for %s; %s",
-		conn.clientName, conn.conn.RemoteAddr().String(),
-		conn.ServerName, conn.conn.LocalAddr().String(),
+		"Received: from %s by %s with Golang Naive Mail Forwarder id %s for %s; %s",
+		remoteaddr,
+		localaddr,
 		"beta",
 		conn.mailFrom.String(),
 		time.Now().Format("02 Jan 06 15:04:05 MST"),
