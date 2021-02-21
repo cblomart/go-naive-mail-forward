@@ -13,6 +13,7 @@ import (
 	"net/textproto"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -258,6 +259,20 @@ func (conn *Conn) data() error {
 	// get a text proto reader
 	tp := textproto.NewReader(reader)
 	var sb strings.Builder
+	// prepare trace line
+	trace := fmt.Sprintf(
+		"Recieved: from %s (%s) by %s (%s) with Golang Naive Mail Forwarder id %s for %s; %s",
+		conn.clientName, conn.conn.RemoteAddr().String(),
+		conn.ServerName, conn.conn.LocalAddr().String(),
+		"beta",
+		conn.mailFrom.String(),
+		time.Now().Format("02 Jan 06 15:04:05 MST"),
+	)
+	if conn.Debug {
+		log.Printf("server - %s: trace: %s", conn.showClient(), trace)
+	}
+	sb.WriteString(trace)
+	sb.WriteString("\r\n")
 	for {
 		line, err := tp.ReadLine()
 		if err != nil {

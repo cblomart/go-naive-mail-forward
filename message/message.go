@@ -60,7 +60,7 @@ func (m *Message) Signed() bool {
 		if strings.HasPrefix(line, "DKIM-Signature:") {
 			return true
 		}
-		if strings.HasPrefix(line, "MIME-Version:") {
+		if len(line) == 0 {
 			return false
 		}
 	}
