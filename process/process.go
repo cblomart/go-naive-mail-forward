@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	keepaliveInterval = 2
-	connectionTimeout = 20
+	keepaliveInterval = 4
+	connectionTimeout = 30
 )
 
 type Process struct {
@@ -124,7 +124,9 @@ func (p *Process) reportPool() {
 	p.poolLock.RLock()
 	defer p.poolLock.RUnlock()
 	if len(p.smtpPool) == 0 {
-		log.Printf("process - no smtp connection")
+		if p.Debug {
+			log.Printf("process - no smtp connection")
+		}
 		return
 	}
 	for _, client := range p.smtpPool {

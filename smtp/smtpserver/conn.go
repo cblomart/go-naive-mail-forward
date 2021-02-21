@@ -202,6 +202,10 @@ func (conn *Conn) mailfrom(param string) error {
 		log.Printf("server - %s: mail from %s", conn.showClient(), ma)
 	}
 	conn.mailFrom = ma
+	accept, _ := conn.spfCheck("", 0)
+	if !accept {
+		return conn.send(smtp.STATUSERROR, "spf failed")
+	}
 	conn.rcptTo = make([]address.MailAddress, 0)
 	return conn.send(smtp.STATUSOK, "ok")
 }
@@ -363,4 +367,305 @@ func (conn *Conn) request() (string, string, error) {
 	params := command[i+1:]
 	command = strings.ToUpper(command[:i])
 	return command, params, nil
+}
+
+func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
+	// default to sender domain
+	domain = conn.mailFrom.Domain
+	// smtp should be contacted via TCP
+	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
+	if !ok {
+		return true, lookups
+	}
+	name := ""
+	names, err := net.LookupAddr(tcpaddr.IP.String())
+	if err == nil {
+		name = names[0]
+	}
+	if conn.Debug {
+		log.Printf("server - %s: checking spf record for %s against %s", conn.showClient(), domain, tcpaddr.IP.String())
+	}
+	spf, lookups := GetSPF(domain, lookups)
+	if len(spf) == 0 {
+		if conn.Debug {
+			log.Printf("server - %s: empty spf for %s", conn.showClient(), domain)
+		}
+		return true, lookups
+	}
+	if conn.Debug {
+		log.Printf("server - %s: spf record for %s: %s", conn.showClient(), domain, spf)
+	}
+	// do replacement
+	// variables
+	vars := map[string]string{}
+	// sender
+	vars["s"] = conn.mailFrom.String()
+	vars["sr"] = strings.Join(Reverse(strings.Split(vars["s"], ".")), ".")
+	// local part of sender
+	vars["l"] = conn.mailFrom.User
+	vars["lr"] = strings.Join(Reverse(strings.Split(vars["l"], ".")), ".")
+	// domain
+	vars["d"] = conn.mailFrom.Domain
+	vars["dr"] = strings.Join(Reverse(strings.Split(vars["d"], ".")), ".")
+	// ip address
+	vars["i"] = tcpaddr.IP.String()
+	vars["ir"] = strings.Join(Reverse(strings.Split(vars["i"], ".")), ".")
+	// ptr of address
+	if len(name) != 0 {
+		vars["p"] = name
+		vars["pr"] = strings.Join(Reverse(strings.Split(vars["p"], ".")), ".")
+	}
+	// type of address (assume IPv4)
+	vars["v"] = "in-addr"
+	if tcpaddr.IP.To16() != nil {
+		vars["v"] = "ip6"
+	}
+	// hello domain
+	vars["h"] = conn.clientName
+	vars["hr"] = strings.Join(Reverse(strings.Split(vars["i"], ".")), ".")
+	// do replacements
+	for repl := range vars {
+		spf = strings.Replace(spf, fmt.Sprintf("%%{%s}", repl), vars[repl], -1)
+	}
+	// evaluate mechanisms
+	for _, fullmechanism := range strings.Split(spf, " ") {
+		// replace spaces
+		fullmechanism = strings.Replace(fullmechanism, "%_", " ", -1)
+		fullmechanism = strings.Replace(fullmechanism, "%_", " %20", -1)
+		// replace lingering %
+		fullmechanism = strings.Replace(fullmechanism, "%%", "%", -1)
+		// now we have a clean mechanism
+		action := "+"
+		first := string(fullmechanism[0])
+		if first == "~" || first == "?" || first == "-" || first == "+" {
+			action = first
+			if first == "~" || first == "?" {
+				action = "+"
+			}
+		} else {
+			fullmechanism = fmt.Sprintf("+%s", fullmechanism)
+		}
+		mechanism := fullmechanism[1:]
+		prefix := ""
+		i := strings.Index(mechanism, "/")
+		if i >= 0 {
+			prefix = mechanism[i+1:]
+			mechanism = mechanism[:i]
+		}
+		param := ""
+		i = strings.Index(mechanism, ":")
+		if i >= 0 {
+			param = mechanism[i+1:]
+			mechanism = mechanism[:i]
+		}
+		switch mechanism {
+		case "all":
+			if conn.Debug {
+				log.Printf("server - %s: hitting spf catchall for %s", conn.showClient(), domain)
+			}
+			return conn.evalAction(domain, action, fullmechanism), lookups
+		case "ip4":
+			fallthrough
+		case "ip6":
+			if len(param) == 0 {
+				continue
+			}
+			if len(prefix) == 0 {
+				// ip match
+				if tcpaddr.IP.String() == param {
+					return conn.evalAction(domain, action, fullmechanism), lookups
+				}
+			} else {
+				_, network, err := net.ParseCIDR(fmt.Sprintf("%s/%s", param, prefix))
+				if err != nil {
+					// wrong network information
+					continue
+				}
+				if network.Contains(tcpaddr.IP) {
+					return conn.evalAction(domain, action, fullmechanism), lookups
+				}
+			}
+		case "a":
+			tocheck := param
+			if len(tocheck) == 0 {
+				tocheck = conn.mailFrom.Domain
+			}
+			ars, err := net.LookupIP(tocheck)
+			lookups++
+			if lookups > 10 {
+				log.Printf("server - %s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
+				return true, lookups
+			}
+			if err != nil {
+				continue
+			}
+			for _, ar := range ars {
+				if len(prefix) == 0 {
+					if ar.Equal(tcpaddr.IP) {
+						return conn.evalAction(domain, action, fullmechanism), lookups
+					}
+				} else {
+					strnetwork := fmt.Sprintf("%s/%s", ar.String(), prefix)
+					_, network, err := net.ParseCIDR(strnetwork)
+					if err != nil {
+						continue
+					}
+					if network.Contains(tcpaddr.IP) {
+						return conn.evalAction(domain, action, fullmechanism), lookups
+					}
+				}
+			}
+		case "mx":
+			tocheck := param
+			if len(tocheck) == 0 {
+				tocheck = conn.mailFrom.Domain
+			}
+			mxs, err := net.LookupMX(tocheck)
+			lookups++
+			if lookups > 10 {
+				log.Printf("server - %s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
+				return true, lookups
+			}
+			if err != nil {
+				continue
+			}
+			for _, mx := range mxs {
+				ars, err := net.LookupIP(mx.Host)
+				lookups++
+				if lookups > 10 {
+					log.Printf("server - %s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
+					return true, lookups
+				}
+				if err != nil {
+					continue
+				}
+				for _, ar := range ars {
+					if len(prefix) == 0 {
+						if ar.Equal(tcpaddr.IP) {
+							return conn.evalAction(domain, action, fullmechanism), lookups
+						}
+					} else {
+						strnetwork := fmt.Sprintf("%s/%s", ar.String(), prefix)
+						_, network, err := net.ParseCIDR(strnetwork)
+						if err != nil {
+							continue
+						}
+						if network.Contains(tcpaddr.IP) {
+							return conn.evalAction(domain, action, fullmechanism), lookups
+						}
+					}
+				}
+			}
+		case "ptr":
+			names, err := net.LookupAddr(tcpaddr.IP.String())
+			lookups++
+			if lookups > 10 {
+				log.Printf("server - %s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
+				return true, lookups
+			}
+			if err != nil {
+				continue
+			}
+			for _, name := range names {
+				ips, err := net.LookupIP(name)
+				lookups++
+				if lookups > 10 {
+					log.Printf("server - %s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
+					return true, lookups
+				}
+				if err != nil {
+					continue
+				}
+				for _, ip := range ips {
+					if ip.Equal(tcpaddr.IP) {
+						return conn.evalAction(domain, action, fullmechanism), lookups
+					}
+				}
+			}
+		case "exists":
+			if len(param) == 0 {
+				continue
+			}
+			ars, err := net.LookupIP(param)
+			lookups++
+			if lookups > 10 {
+				log.Printf("server - %s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
+				return true, lookups
+			}
+			if err != nil {
+				continue
+			}
+			if len(ars) > 0 {
+				return conn.evalAction(domain, action, fullmechanism), lookups
+			}
+		case "include":
+			if len(param) == 0 {
+				continue
+			}
+			return conn.spfCheck(param, lookups)
+		default:
+			if conn.Debug {
+				log.Printf("server - %s: ignoring unknown spf mechanism '%s'", conn.showClient(), mechanism)
+			}
+		}
+	}
+	if conn.Debug {
+		log.Printf("server - %s: no spf mechanisms matched for %s. defaulting for accept!", conn.showClient(), domain)
+	}
+	return true, lookups
+}
+
+func (conn *Conn) evalAction(domain, action, fullmechanism string) bool {
+	if action == "+" {
+		return true
+	}
+	// action should be deny then
+	log.Printf("server - %s: %s spf reject at '%s'", conn.showClient(), domain, fullmechanism)
+	return false
+}
+
+func Reverse(slice []string) []string {
+	if len(slice) <= 1 {
+		return slice
+	}
+	for i := 0; i < len(slice)/2; i++ {
+		tmp := slice[i]
+		slice[i] = slice[len(slice)-1-i]
+		slice[len(slice)-1-i] = tmp
+	}
+	return slice
+}
+
+func GetSPF(domain string, lookups int) (string, int) {
+	if lookups >= 10 {
+		return "", lookups
+	}
+	txts, err := net.LookupTXT(domain)
+	lookups++
+	if err != nil {
+		log.Printf("server - failed to get txt records for %s: %s", domain, err.Error())
+		return "", lookups
+	}
+	// get the first spf record found
+	spf := ""
+	for _, txt := range txts {
+		tmp := strings.ToLower(txt)
+		if strings.HasPrefix(tmp, "v=spf1 ") {
+			spf = txt[7:]
+			break
+		}
+	}
+	if len(spf) == 0 {
+		return spf, lookups
+	}
+	i := strings.Index(strings.ToLower(spf), "redirect=")
+	if i < 0 {
+		return spf, lookups
+	}
+	spf = spf[i+9:]
+	i = strings.Index(spf, " ")
+	if i > 0 {
+		spf = spf[:i]
+	}
+	return GetSPF(spf, lookups)
 }
