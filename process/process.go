@@ -248,11 +248,13 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	}
 	// wait for messages to be sent
 	wg.Wait()
+	close(okChan)
 	// evaluate result
 	result := false
 	for res := range okChan {
 		if res {
 			result = true
+			break
 		}
 	}
 	// return result
