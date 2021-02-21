@@ -623,6 +623,9 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 
 func (conn *Conn) evalAction(domain, action, fullmechanism string) bool {
 	if action == "+" {
+		if conn.Debug {
+			log.Printf("server - %s: %s spf accept at '%s'", conn.showClient(), domain, fullmechanism)
+		}
 		return true
 	}
 	// action should be deny then
