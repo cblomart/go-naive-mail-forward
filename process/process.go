@@ -77,10 +77,8 @@ func (p *Process) checkPools() {
 }
 
 func (p *Process) cleanPool() {
-	log.Printf("process: waiting for lock to clean pools")
 	p.poolLock.Lock()
 	defer p.poolLock.Unlock()
-	log.Printf("process: cleaning pools")
 	// suppose lock was already aquired
 	minLastSent := time.Now().Add(-connectionTimeout * time.Minute)
 	// clean disconnected or pools that did not send mails recently
@@ -115,6 +113,10 @@ func (p *Process) keepAlivePool() {
 func (p *Process) reportPool() {
 	p.poolLock.RLock()
 	defer p.poolLock.RUnlock()
+	if len(p.smtpPool) == 0 {
+		log.Printf("process - no smtp connection")
+		return
+	}
 	for _, client := range p.smtpPool {
 		log.Printf("process - smtp connection (server/domains/lastsent): %s/%s/%s", client.Relay, strings.Join(client.Domains, ","), time.Now().Sub(client.LastSent).String())
 	}
