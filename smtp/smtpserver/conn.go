@@ -270,7 +270,7 @@ func (conn *Conn) data() error {
 	if ok {
 		remoteaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 	}
-	localaddr := conn.clientName
+	localaddr := conn.ServerName
 	tcpaddr, ok = conn.conn.LocalAddr().(*net.TCPAddr)
 	if ok {
 		localaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
