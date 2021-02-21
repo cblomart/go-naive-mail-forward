@@ -15,6 +15,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	keepaliveInterval = 2
+	connectionTimeout = 20
+)
+
 type Process struct {
 	smtpPool []smtpclient.SmtpClient
 	poolLock sync.RWMutex
@@ -37,9 +42,9 @@ func NewProcessor(hostname string, processRules *rules.Rules, debug bool) (*Proc
 }
 
 func (p *Process) ManagePools() {
-	log.Printf("process - manage smtp connection pool (keepalive: 4m, nosendtimeout: 30m)")
+	log.Printf("process - manage smtp connection pool (keepalive: %dm, nosendtimeout: %dm)", keepaliveInterval, connectionTimeout)
 	// check every keepalive
-	ticker := time.NewTicker(4 * time.Minute)
+	ticker := time.NewTicker(keepaliveInterval * time.Minute)
 	quit := make(chan struct{})
 	go func() {
 		for {
@@ -72,10 +77,12 @@ func (p *Process) checkPools() {
 }
 
 func (p *Process) cleanPool() {
+	log.Printf("process: waiting for lock to clean pools")
 	p.poolLock.Lock()
 	defer p.poolLock.Unlock()
+	log.Printf("process: cleaning pools")
 	// suppose lock was already aquired
-	minLastSent := time.Now().Add(-30 * time.Minute)
+	minLastSent := time.Now().Add(-connectionTimeout * time.Minute)
 	// clean disconnected or pools that did not send mails recently
 	toRemove := []int{}
 	for i, _ := range p.smtpPool {
