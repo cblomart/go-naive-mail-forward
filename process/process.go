@@ -83,7 +83,7 @@ func (p *Process) cleanPool() {
 	minLastSent := time.Now().Add(-connectionTimeout * time.Minute)
 	// clean disconnected or pools that did not send mails recently
 	toRemove := []int{}
-	for i, _ := range p.smtpPool {
+	for i := range p.smtpPool {
 		if !p.smtpPool[i].Connected || p.smtpPool[i].LastSent.Before(minLastSent) {
 			toRemove = append(toRemove, i)
 		}
@@ -147,7 +147,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	// match domains against existing smtp connections
 	found := false
 	matchedDomains := []int{}
-	for i, _ := range p.smtpPool {
+	for i := range p.smtpPool {
 		for _, smtpDomain := range p.smtpPool[i].Domains {
 			for j, msgDomain := range domains {
 				if smtpDomain == msgDomain {
@@ -186,7 +186,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 		// match mail exchanger against pool
 		targetFound := false
 		for _, mx := range mxs {
-			for i, _ := range p.smtpPool {
+			for i := range p.smtpPool {
 				if mx.Host == p.smtpPool[i].Relay {
 					// update pool data with domain
 					p.smtpPool[i].Domains = append(p.smtpPool[i].Domains, domain)
@@ -258,6 +258,16 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 		if res {
 			result = true
 			break
+		}
+	}
+	// status on connections
+	if p.Debug {
+		for i := range p.smtpPool {
+			state := "disconnected"
+			if p.smtpPool[i].Connected {
+				state = "connected"
+			}
+			log.Printf("process - mx %s is %s", p.smtpPool[i].Relay, state)
 		}
 	}
 	// return result
