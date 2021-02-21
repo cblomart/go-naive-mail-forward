@@ -603,6 +603,9 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 			if len(param) == 0 {
 				continue
 			}
+			if conn.Debug {
+				log.Printf("server - %s: spf for %s, checking include %s", conn.showClient(), domain, param)
+			}
 			return conn.spfCheck(param, lookups)
 		default:
 			if conn.Debug {
