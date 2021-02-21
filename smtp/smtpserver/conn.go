@@ -202,10 +202,6 @@ func (conn *Conn) mailfrom(param string) error {
 		log.Printf("server - %s: mail from %s", conn.showClient(), ma)
 	}
 	conn.mailFrom = ma
-	accept, _ := conn.spfCheck("", 0)
-	if !accept {
-		return conn.send(smtp.STATUSERROR, "spf failed")
-	}
 	conn.rcptTo = make([]address.MailAddress, 0)
 	return conn.send(smtp.STATUSOK, "ok")
 }
@@ -323,6 +319,11 @@ func (conn *Conn) data() error {
 		addresses[i] = ma.String()
 	}
 	log.Printf("server - %s: message %s (%d bytes) to %v", conn.showClient(), msg.Id, sb.Len(), strings.Join(addresses, ", "))
+	accept, _ := conn.spfCheck("", 0)
+	if !accept && !msg.Signed() {
+		log.Printf("server - %s: message %s is not signed and refused by SPF checks", conn.showClient(), msg.Id)
+		return conn.send(smtp.STATUSERROR, "spf failed")
+	}
 	msgId, err := conn.processor.Handle(msg)
 	if err != nil {
 		log.Printf("server - %s:%s: error handling message: %s", conn.showClient(), msgId, err.Error())
