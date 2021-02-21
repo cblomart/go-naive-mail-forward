@@ -372,7 +372,9 @@ func (conn *Conn) request() (string, string, error) {
 
 func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 	// default to sender domain
-	domain = conn.mailFrom.Domain
+	if len(domain) == 0 {
+		domain = conn.mailFrom.Domain
+	}
 	// smtp should be contacted via TCP
 	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
 	if !ok {
