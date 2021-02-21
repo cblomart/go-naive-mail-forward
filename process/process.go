@@ -238,11 +238,11 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	}
 	// create a waitgroup for client sends
 	var wg sync.WaitGroup
+	wg.Add(len(targetSmtp))
 	// channel to recieve results
 	okChan := make(chan bool, len(targetSmtp))
 	// start gofunc to send messages
 	for _, i := range targetSmtp {
-		wg.Add(1)
 		//client := p.smtpPool[i]
 		go SendAsync(p.smtpPool[i], msg, &wg, okChan)
 	}
