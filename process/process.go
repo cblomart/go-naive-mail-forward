@@ -142,6 +142,17 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	defer p.poolLock.Unlock()
 	// get targeted domains
 	domains := msg.Domains()
+	// status on connections
+	if p.Debug {
+		log.Printf("process - mx statuses")
+		for i := range p.smtpPool {
+			state := "disconnected"
+			if p.smtpPool[i].Connected {
+				state = "connected"
+			}
+			log.Printf("process - mx %s is %s", p.smtpPool[i].Relay, state)
+		}
+	}
 	// list the pools to run the message to
 	targetSmtp := []int{}
 	// match domains against existing smtp connections
@@ -262,6 +273,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	}
 	// status on connections
 	if p.Debug {
+		log.Printf("process - mx statuses")
 		for i := range p.smtpPool {
 			state := "disconnected"
 			if p.smtpPool[i].Connected {
