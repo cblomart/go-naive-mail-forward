@@ -261,7 +261,7 @@ func (conn *Conn) data() error {
 	var sb strings.Builder
 	// prepare trace line
 	trace := fmt.Sprintf(
-		"Recieved: from %s (%s) by %s (%s) with Golang Naive Mail Forwarder id %s for %s; %s",
+		"Received: from %s (%s) by %s (%s) with Golang Naive Mail Forwarder id %s for %s; %s",
 		conn.clientName, conn.conn.RemoteAddr().String(),
 		conn.ServerName, conn.conn.LocalAddr().String(),
 		"beta",
