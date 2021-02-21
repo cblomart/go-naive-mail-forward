@@ -237,6 +237,7 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 				Domains:  []string{domain},
 				Debug:    p.Debug,
 				Hostname: p.Hostname,
+				LastSent: time.Now(),
 			}
 			// connect to server
 			err = client.Connect()
