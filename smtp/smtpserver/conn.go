@@ -266,14 +266,14 @@ func (conn *Conn) data() error {
 	var sb strings.Builder
 	// get addresses of local and remote servers
 	remoteaddr := conn.clientName
-	ipaddr, ok := conn.conn.RemoteAddr().(*net.IPAddr)
+	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
 	if ok {
-		remoteaddr += fmt.Sprintf(" (%s)", ipaddr.String())
+		remoteaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 	}
 	localaddr := conn.clientName
-	ipaddr, ok = conn.conn.LocalAddr().(*net.IPAddr)
+	tcpaddr, ok = conn.conn.LocalAddr().(*net.TCPAddr)
 	if ok {
-		localaddr += fmt.Sprintf(" (%s)", ipaddr.String())
+		localaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 	}
 	// prepare trace line
 	trace := fmt.Sprintf(
