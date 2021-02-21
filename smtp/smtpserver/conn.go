@@ -293,6 +293,7 @@ func (conn *Conn) data() error {
 		log.Printf("server - %s:%s: error handling message: %s", conn.showClient(), msgId, err.Error())
 		return conn.send(smtp.STATUSTMPER, "could not handle message")
 	}
+	log.Printf("server - %s: message %s recieved", conn.showClient(), msg.Id)
 	return conn.send(smtp.STATUSOK, "recieved 5/5")
 }
 

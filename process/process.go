@@ -17,7 +17,7 @@ import (
 
 type Process struct {
 	smtpPool []smtpclient.SmtpClient
-	poolLock sync.Mutex
+	poolLock sync.RWMutex
 	rules    *rules.Rules
 	Hostname string
 	Debug    bool
@@ -26,7 +26,7 @@ type Process struct {
 func NewProcessor(hostname string, processRules *rules.Rules, debug bool) (*Process, error) {
 	process := &Process{
 		smtpPool: []smtpclient.SmtpClient{},
-		poolLock: sync.Mutex{},
+		poolLock: sync.RWMutex{},
 		rules:    processRules,
 		Debug:    debug,
 		Hostname: hostname,
@@ -61,8 +61,6 @@ func remove(s []int, i int) []int {
 }
 
 func (p *Process) checkPools() {
-	p.poolLock.Lock()
-	defer p.poolLock.Unlock()
 	// clean current pool
 	p.cleanPool()
 	// keepalive current pool
@@ -74,6 +72,8 @@ func (p *Process) checkPools() {
 }
 
 func (p *Process) cleanPool() {
+	p.poolLock.Lock()
+	defer p.poolLock.Unlock()
 	// suppose lock was already aquired
 	minLastSent := time.Now().Add(-30 * time.Minute)
 	// clean disconnected or pools that did not send mails recently
@@ -96,6 +96,8 @@ func (p *Process) cleanPool() {
 }
 
 func (p *Process) keepAlivePool() {
+	p.poolLock.RLock()
+	defer p.poolLock.RUnlock()
 	for _, client := range p.smtpPool {
 		if client.Connected {
 			client.Noop()
@@ -104,6 +106,8 @@ func (p *Process) keepAlivePool() {
 }
 
 func (p *Process) reportPool() {
+	p.poolLock.RLock()
+	defer p.poolLock.RUnlock()
 	for _, client := range p.smtpPool {
 		log.Printf("process - smtp connection (server/domains/lastsent): %s/%s/%s", client.Relay, strings.Join(client.Domains, ","), time.Now().Sub(client.LastSent).String())
 	}
@@ -234,11 +238,11 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	}
 	// create a waitgroup for client sends
 	var wg sync.WaitGroup
-	wg.Add(len(targetSmtp))
 	// channel to recieve results
 	okChan := make(chan bool, len(targetSmtp))
 	// start gofunc to send messages
 	for _, i := range targetSmtp {
+		wg.Add(1)
 		//client := p.smtpPool[i]
 		go SendAsync(p.smtpPool[i], msg, &wg, okChan)
 	}
