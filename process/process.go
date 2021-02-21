@@ -84,7 +84,17 @@ func (p *Process) cleanPool() {
 	// clean disconnected or pools that did not send mails recently
 	toRemove := []int{}
 	for i := range p.smtpPool {
-		if !p.smtpPool[i].Connected || p.smtpPool[i].LastSent.Before(minLastSent) {
+		if !p.smtpPool[i].Connected {
+			if p.Debug {
+				log.Printf("process - removing disconnected mx %s", p.smtpPool[i].Relay)
+			}
+			toRemove = append(toRemove, i)
+			continue
+		}
+		if p.smtpPool[i].LastSent.Before(minLastSent) {
+			if p.Debug {
+				log.Printf("process - removing timedout mx %s (%s)", p.smtpPool[i].Relay, time.Now().Sub(p.smtpPool[i].LastSent).String())
+			}
 			toRemove = append(toRemove, i)
 		}
 	}
