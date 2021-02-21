@@ -298,7 +298,9 @@ func (conn *Conn) data() error {
 }
 
 func (conn *Conn) quit() error {
-	log.Printf("server - %s: goodbye", conn.showClient())
+	if conn.Debug {
+		log.Printf("server - %s: goodbye", conn.showClient())
+	}
 	return conn.send(smtp.STATUSBYE, "goodbye")
 }
 

@@ -128,14 +128,9 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	if p.Debug {
 		log.Printf("process - %s: mapping smtp relays to send to", msg.Id)
 	}
-	log.Printf("process - %s: waiting for smtp pool lock", msg.Id)
 	// lock the pool
 	p.poolLock.Lock()
-	defer func() {
-		log.Printf("process - %s: unlocking pool", msg.Id)
-		p.poolLock.Unlock()
-	}()
-	log.Printf("process - %s: processing message", msg.Id)
+	defer p.poolLock.Unlock()
 	// get targeted domains
 	domains := msg.Domains()
 	// list the pools to run the message to
@@ -243,7 +238,6 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	okChan := make(chan bool, len(targetSmtp))
 	// start gofunc to send messages
 	for _, i := range targetSmtp {
-		//client := p.smtpPool[i]
 		go SendAsync(p.smtpPool[i], msg, &wg, okChan)
 	}
 	// wait for messages to be sent
