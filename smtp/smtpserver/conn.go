@@ -97,14 +97,8 @@ func (conn *Conn) ProcessMessages() {
 		case "QUIT":
 			err = conn.quit()
 			return
-		case "HELO":
-			quit, nerr := conn.helo(params, false)
-			if nerr != nil || quit {
-				return
-			}
-			err = nerr
-		case "EHLO":
-			quit, nerr := conn.helo(params, true)
+		case "HELO", "EHLO":
+			quit, nerr := conn.helo(params, cmd == "EHLO")
 			if nerr != nil || quit {
 				return
 			}
@@ -207,9 +201,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	}
 	conn.hello = true
 	conn.clientName = hostname
-	if conn.Debug {
-		log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
-	}
+	log.Printf("server - %s: welcoming name: '%s'\n", conn.showClient(), hostname)
 	_, istls := conn.conn.(*tls.Conn)
 	if extended && conn.tlsConfig != nil && !istls {
 		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
