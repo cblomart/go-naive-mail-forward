@@ -150,7 +150,9 @@ func (c *SmtpClient) StartTLS() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("client - %s:%s: starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
+	if c.Debug {
+		log.Printf("client - %s:%s: starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
+	}
 	c.conn = tlsConn
 	return nil
 }
@@ -261,7 +263,9 @@ func (c *SmtpClient) Data(data string) error {
 func (c *SmtpClient) SendMessage(msg message.Message) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	log.Printf("client - %s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
+	if c.Debug {
+		log.Printf("client - %s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
+	}
 	// sent mail from
 	err := c.MailFrom(msg.From.String())
 	if err != nil {

@@ -256,7 +256,9 @@ func (conn *Conn) starttls() error {
 		log.Printf("server - %s: failed to start tls connection %s", conn.showClient(), err.Error())
 		return conn.send(smtp.STATUSNOPOL, "tls handshake error")
 	}
-	log.Printf("server - %s: starttls complete (%s)", conn.showClient(), tlsinfo.TlsInfo(tlsConn))
+	if conn.Debug {
+		log.Printf("server - %s: starttls complete (%s)", conn.showClient(), tlsinfo.TlsInfo(tlsConn))
+	}
 	// reset state
 	conn.hello = false
 	conn.conn = tlsConn
