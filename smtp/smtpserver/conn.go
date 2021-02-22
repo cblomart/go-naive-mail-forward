@@ -6,6 +6,7 @@ import (
 	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/smtp"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
@@ -29,18 +30,28 @@ type Conn struct {
 	rcptTo     []address.MailAddress
 	processor  *process.Process
 	domains    []string
-	tls        bool
+	tlsConfig  *tls.Config
 }
 
 var DomainMatch = regexp.MustCompile("^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$")
 
-func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, debug bool) {
-	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, debug)
+func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, keyfile string, certfile string, debug bool) {
+	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, keyfile, certfile, debug)
 	defer smtpConn.Close()
 	smtpConn.ProcessMessages()
 }
 
-func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, debug bool) *Conn {
+func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, keyfile string, certfile string, debug bool) *Conn {
+	// set tls config
+	var tlsConfig *tls.Config
+	certificate, err := tls.LoadX509KeyPair("server.pem", "server.key")
+	if err != nil {
+		log.Printf("server - error initializing tls config: %v", err)
+	} else {
+		tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{certificate},
+		}
+	}
 	return &Conn{
 		conn:       conn,
 		hello:      false,
@@ -51,6 +62,7 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 		rcptTo:     make([]address.MailAddress, 0),
 		processor:  processor,
 		domains:    domains,
+		tlsConfig:  tlsConfig,
 	}
 }
 
@@ -95,6 +107,8 @@ func (conn *Conn) ProcessMessages() {
 				return
 			}
 			err = nerr
+		case "STARTTLS":
+			conn.starttls()
 		case "NOOP":
 			err = conn.noop()
 		case "RSET":
@@ -194,7 +208,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	if conn.Debug {
 		log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
 	}
-	if extended {
+	if extended && conn.tlsConfig != nil {
 		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
@@ -211,6 +225,12 @@ func (conn *Conn) rset() error {
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
 	return conn.send(smtp.STATUSOK, "ok")
+}
+
+func (conn *Conn) starttls() error {
+	log.Printf("server - switching to tls")
+	conn.conn = tls.Server(conn.conn, conn.tlsConfig)
+	return nil
 }
 
 func (conn *Conn) mailfrom(param string) error {
