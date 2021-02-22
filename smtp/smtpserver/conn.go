@@ -222,6 +222,9 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 }
 
 func (conn *Conn) checkdnsbl() bool {
+	if conn.Debug {
+		log.Printf("server - %s: dns black list check", conn.showClient())
+	}
 	// determine what needs to be resolved
 	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
 	if !ok {
@@ -254,6 +257,9 @@ func (conn *Conn) checkdnsbl() bool {
 	} else {
 		// ipv4
 		prefix = strings.Join(Reverse(strings.Split(tcpaddr.IP.String(), ".")), ".")
+	}
+	if conn.Debug {
+		log.Printf("server - %s: black list check prefix %s", conn.showClient(), prefix)
 	}
 	// check in //
 	var wg sync.WaitGroup
