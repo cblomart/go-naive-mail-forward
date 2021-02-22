@@ -228,8 +228,21 @@ func (conn *Conn) rset() error {
 }
 
 func (conn *Conn) starttls() error {
-	log.Printf("server - switching to tls")
-	conn.conn = tls.Server(conn.conn, conn.tlsConfig)
+	if conn.Debug {
+		log.Printf("server - switching to tls")
+	}
+	tlsConn := tls.Server(conn.conn, conn.tlsConfig)
+	err := tlsConn.Handshake()
+	if err != nil {
+		log.Printf("server - %s: failed to start tls connection %s", conn.showClient(), err.Error())
+		return conn.send(smtp.STATUSNOPOL, "tls handshake error")
+	}
+	log.Printf("server - %s: starttls complete", conn.showClient())
+	// reset state
+	conn.hello = false
+	conn.conn = tlsConn
+	conn.mailFrom = nil
+	conn.rcptTo = make([]address.MailAddress, 0)
 	return nil
 }
 
