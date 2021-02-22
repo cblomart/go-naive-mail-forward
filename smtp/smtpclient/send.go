@@ -67,14 +67,14 @@ func (c *SmtpClient) Close() error {
 	return nil
 }
 
-func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) (string, error) {
+func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) (bool, error) {
 	if fmt.Sprintf("%d", expcode) != line[:3] {
-		return "", fmt.Errorf("unexpexted error code returned %d", expcode)
+		return false, fmt.Errorf("unexpexted error code returned %d", expcode)
 	}
-	if line[4] == '-' {
-		return line[4:], nil
+	if line[3] == '-' {
+		return true, nil
 	}
-	return "", nil
+	return false, nil
 }
 
 func (c *SmtpClient) sendCmd(command string) error {
@@ -101,15 +101,15 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 		if c.Debug {
 			log.Printf("client - %s:%s: < %s", c.LocalPort, c.Relay, line)
 		}
-		ext, err := c.checkSmtpRespCode(code, line)
+		more, err := c.checkSmtpRespCode(code, line)
 		if err != nil {
 			return "", err
 		}
-		if len(ext) == 0 {
-			break
-		}
-		if strings.ToUpper(ext) == "STARTTLS" {
+		if strings.ToUpper(line[4:]) == "STARTTLS" {
 			c.tlsSupported = true
+		}
+		if !more {
+			break
 		}
 	}
 	return line, nil
