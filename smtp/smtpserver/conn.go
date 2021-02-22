@@ -365,11 +365,17 @@ func (conn *Conn) data() error {
 	if ok {
 		localaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 	}
+	tlsinfo := ""
+	tlsConn, ok := conn.conn.(*tls.Conn)
+	if ok {
+		tlsinfo = fmt.Sprintf("(%s)", TlsInfo(tlsConn))
+	}
 	// prepare trace line
 	trace := fmt.Sprintf(
-		"Received: from %s by %s with Golang Naive Mail Forwarder id %s for %s; %s",
+		"Received: from %s by %s with Golang Naive Mail Forwarder (%s) id %s for %s; %s",
 		remoteaddr,
 		localaddr,
+		tlsinfo,
 		"beta",
 		conn.mailFrom.String(),
 		time.Now().Format("02 Jan 06 15:04:05 MST"),
