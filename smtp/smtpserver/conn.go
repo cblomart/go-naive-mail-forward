@@ -29,6 +29,7 @@ type Conn struct {
 	rcptTo     []address.MailAddress
 	processor  *process.Process
 	domains    []string
+	tls        bool
 }
 
 var DomainMatch = regexp.MustCompile("^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$")
@@ -82,8 +83,14 @@ func (conn *Conn) ProcessMessages() {
 		case "QUIT":
 			err = conn.quit()
 			return
-		case "HELO", "EHLO":
-			quit, nerr := conn.helo(params)
+		case "HELO":
+			quit, nerr := conn.helo(params, false)
+			if nerr != nil || quit {
+				return
+			}
+			err = nerr
+		case "EHLO":
+			quit, nerr := conn.helo(params, true)
 			if nerr != nil || quit {
 				return
 			}
@@ -141,7 +148,18 @@ func (conn *Conn) showClient() string {
 	return fmt.Sprintf("%s%s", conn.clientName, port)
 }
 
-func (conn *Conn) send(status int, message string) error {
+func (conn *Conn) send(status int, message string, extra ...string) error {
+	if len(extra) > 0 {
+		for _, e := range extra {
+			if conn.Debug {
+				log.Printf("server - %s > %d %s\n", conn.showClient(), status, message)
+			}
+			_, err := fmt.Fprintf(conn.conn, "%d-%s\r\n", status, e)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	if conn.Debug {
 		log.Printf("server - %s > %d %s\n", conn.showClient(), status, message)
 	}
@@ -158,7 +176,7 @@ func (conn *Conn) unknown(command string) error {
 	return conn.send(smtp.STATUSERROR, "syntax error")
 }
 
-func (conn *Conn) helo(hostname string) (bool, error) {
+func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	// user lowercased hostname
 	hostname = strings.ToLower(hostname)
 	if !DomainMatch.MatchString(hostname) {
@@ -175,6 +193,9 @@ func (conn *Conn) helo(hostname string) (bool, error) {
 	conn.clientName = hostname
 	if conn.Debug {
 		log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
+	}
+	if extended {
+		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
@@ -467,9 +488,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 				log.Printf("server - %s: hitting spf catchall for %s", conn.showClient(), domain)
 			}
 			return conn.evalAction(domain, action, fullmechanism), lookups
-		case "ip4":
-			fallthrough
-		case "ip6":
+		case "ip6", "ip4":
 			if len(param) == 0 {
 				continue
 			}
