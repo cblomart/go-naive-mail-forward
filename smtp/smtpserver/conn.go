@@ -152,7 +152,7 @@ func (conn *Conn) send(status int, message string, extra ...string) error {
 	if len(extra) > 0 {
 		for _, e := range extra {
 			if conn.Debug {
-				log.Printf("server - %s > %d %s\n", conn.showClient(), status, message)
+				log.Printf("server - %s > %d-%s\n", conn.showClient(), status, e)
 			}
 			_, err := fmt.Fprintf(conn.conn, "%d-%s\r\n", status, e)
 			if err != nil {
