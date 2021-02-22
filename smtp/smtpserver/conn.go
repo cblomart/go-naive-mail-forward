@@ -204,17 +204,20 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 		log.Printf("server - %s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
+	// check if startls done
+	_, istls := conn.conn.(*tls.Conn)
 	// cehck balacklist
-	if conn.checkdnsbl() {
-		log.Printf("server - %s: known bad actor: '%s'\n", conn.showClient(), hostname)
-		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+	if !istls {
+		if conn.checkdnsbl() {
+			log.Printf("server - %s: known bad actor: '%s'\n", conn.showClient(), hostname)
+			return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+		}
 	}
 	conn.hello = true
 	conn.clientName = hostname
 	if conn.Debug {
 		log.Printf("server - %s: welcoming name: '%s'\n", conn.showClient(), hostname)
 	}
-	_, istls := conn.conn.(*tls.Conn)
 	if extended && conn.tlsConfig != nil && !istls {
 		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 	}
@@ -232,33 +235,33 @@ func (conn *Conn) checkdnsbl() bool {
 		return false
 	}
 	prefix := ""
-	/*
-		if tcpaddr.IP.To16() != nil {
-			// ipv6
-			ip6parts := strings.Split(tcpaddr.IP.String(), ":")
-			var sb strings.Builder
-			for i := range ip6parts {
-				for {
-					if len(ip6parts[i]) == 4 {
-						break
-					}
-					ip6parts[i] = "0" + ip6parts[i]
+	tmp := tcpaddr.IP.To16()
+	if tmp != nil {
+		// ipv6
+		ip6parts := strings.Split(tcpaddr.IP.String(), ":")
+		var sb strings.Builder
+		for i := range ip6parts {
+			for {
+				if len(ip6parts[i]) == 4 {
+					break
 				}
-				sb.WriteString(ip6parts[i])
+				ip6parts[i] = "0" + ip6parts[i]
 			}
-			ip6 := sb.String()
-			sb.Reset()
-			for i := len(ip6) - 1; i >= 0; i-- {
-				sb.WriteByte(ip6[i])
-				if i > 0 {
-					sb.WriteRune('.')
-				}
+			sb.WriteString(ip6parts[i])
+		}
+		ip6 := sb.String()
+		sb.Reset()
+		for i := len(ip6) - 1; i >= 0; i-- {
+			sb.WriteByte(ip6[i])
+			if i > 0 {
+				sb.WriteRune('.')
 			}
-			prefix = sb.String()
-		} else {*/
-	// ipv4
-	prefix = strings.Join(Reverse(strings.Split(tcpaddr.IP.String(), ".")), ".")
-	/*}*/
+		}
+		prefix = sb.String()
+	} else {
+		// ipv4
+		prefix = strings.Join(Reverse(strings.Split(tcpaddr.IP.String(), ".")), ".")
+	}
 	if conn.Debug {
 		log.Printf("server - %s: black list check prefix %s", conn.showClient(), prefix)
 	}
