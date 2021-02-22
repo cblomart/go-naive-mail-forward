@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/smtp"
+	"cblomart/go-naive-mail-forward/tlsinfo"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -23,7 +25,7 @@ type SmtpClient struct {
 	lock         *sync.Mutex
 	Connected    bool
 	LastSent     time.Time
-	tlsSupported bool
+	TlsSupported bool
 }
 
 func (c *SmtpClient) Connect() error {
@@ -106,7 +108,7 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 			return "", err
 		}
 		if strings.ToUpper(line[4:]) == "STARTTLS" {
-			c.tlsSupported = true
+			c.TlsSupported = true
 		}
 		if !more {
 			break
@@ -117,6 +119,40 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 
 func (c *SmtpClient) Quit() error {
 	return c.sendCmd("QUIT")
+}
+
+func (c *SmtpClient) StartTLS() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	err := c.sendCmd("STARTTLS")
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSOK)
+	if err != nil {
+		c.Quit()
+		return err
+	}
+	// build the tls connection
+	if c.Debug {
+		log.Printf("client - %s:%s: switching to tls", c.LocalPort, c.Relay)
+	}
+	tlsConn := tls.Client(
+		c.conn,
+		&tls.Config{
+			InsecureSkipVerify: true,
+		},
+	)
+	if c.Debug {
+		log.Printf("client - %s:%s: tls handshake", c.LocalPort, c.Relay)
+	}
+	err = tlsConn.Handshake()
+	if err != nil {
+		return err
+	}
+	log.Printf("client - %s:%s starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
+	c.conn = tlsConn
+	return nil
 }
 
 func (c *SmtpClient) Helo() error {

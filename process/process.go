@@ -253,6 +253,20 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 				log.Printf("process - %s: not welcomed by mx %s for %s", msg.Id, mx.Host, domain)
 				continue
 			}
+			// handle tls
+			if client.TlsSupported {
+				err = client.StartTLS()
+				if err != nil {
+					log.Printf("process - %s: tls fail at mx %s for %s", msg.Id, mx.Host, domain)
+					continue
+				}
+				// re hello
+				err = client.Helo()
+				if err != nil {
+					log.Printf("process - %s: not welcomed by mx %s for %s", msg.Id, mx.Host, domain)
+					continue
+				}
+			}
 			// add client to the pool
 			p.smtpPool = append(p.smtpPool, *client)
 			targetSmtp = append(targetSmtp, len(p.smtpPool)-1)

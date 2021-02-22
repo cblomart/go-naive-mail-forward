@@ -6,6 +6,7 @@ import (
 	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/smtp"
+	"cblomart/go-naive-mail-forward/tlsinfo"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -238,13 +239,13 @@ func (conn *Conn) starttls() error {
 		return conn.send(smtp.STATUSNOTIMP, "tls not supported")
 	}
 	if conn.Debug {
-		log.Printf("server - switching to tls")
+		log.Printf("server - %s: switching to tls", conn.showClient())
 	}
 	// ready for TLS
 	err := conn.send(smtp.STATUSRDY, "ready to discuss privately")
 	tlsConn = tls.Server(conn.conn, conn.tlsConfig)
 	if conn.Debug {
-		log.Printf("server - tls handshake")
+		log.Printf("server - %s: tls handshake", conn.showClient())
 	}
 	err = tlsConn.Handshake()
 	if err != nil {
@@ -255,32 +256,13 @@ func (conn *Conn) starttls() error {
 		log.Printf("server - %s: failed to start tls connection %s", conn.showClient(), err.Error())
 		return conn.send(smtp.STATUSNOPOL, "tls handshake error")
 	}
-	log.Printf("server - %s: starttls complete (%s)", conn.showClient(), TlsInfo(tlsConn))
+	log.Printf("server - %s: starttls complete (%s)", conn.showClient(), tlsinfo.TlsInfo(tlsConn))
 	// reset state
 	conn.hello = false
 	conn.conn = tlsConn
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
 	return nil
-}
-
-func TlsInfo(c *tls.Conn) string {
-	tlsVer := ""
-	switch c.ConnectionState().Version {
-	case tls.VersionSSL30:
-		tlsVer = "sslv3"
-	case tls.VersionTLS10:
-		tlsVer = "tls1.0"
-	case tls.VersionTLS11:
-		tlsVer = "tls1.1"
-	case tls.VersionTLS12:
-		tlsVer = "tls1.2"
-	case tls.VersionTLS13:
-		tlsVer = "tls1.3"
-	}
-	tlsCypher := tls.CipherSuiteName(c.ConnectionState().CipherSuite)
-	return fmt.Sprintf("version=%s,cypher=%s", tlsVer, tlsCypher)
-
 }
 
 func (conn *Conn) mailfrom(param string) error {
@@ -366,17 +348,17 @@ func (conn *Conn) data() error {
 	if ok {
 		localaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 	}
-	tlsinfo := ""
+	tlsinfos := ""
 	tlsConn, ok := conn.conn.(*tls.Conn)
 	if ok {
-		tlsinfo = fmt.Sprintf("(%s)", TlsInfo(tlsConn))
+		tlsinfos = fmt.Sprintf("(%s)", tlsinfo.TlsInfo(tlsConn))
 	}
 	// prepare trace line
 	trace := fmt.Sprintf(
 		"Received: from %s by %s with Golang Naive Mail Forwarder (%s) id %s for %s; %s",
 		remoteaddr,
 		localaddr,
-		tlsinfo,
+		tlsinfos,
 		"beta",
 		conn.mailFrom.String(),
 		time.Now().Format("02 Jan 06 15:04:05 MST"),
