@@ -231,11 +231,17 @@ func (conn *Conn) starttls() error {
 	if conn.Debug {
 		log.Printf("server - switching to tls")
 	}
+	// ready for TLS
+	err := conn.send(smtp.STATUSRDY, "ready to discuss privately")
 	tlsConn := tls.Server(conn.conn, conn.tlsConfig)
 	if conn.Debug {
 		log.Printf("server - tls handshake")
 	}
-	err := tlsConn.Handshake()
+	err = tlsConn.Handshake()
+	if err != nil {
+		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
+		return fmt.Errorf("Cannot read")
+	}
 	if err != nil {
 		log.Printf("server - %s: failed to start tls connection %s", conn.showClient(), err.Error())
 		return conn.send(smtp.STATUSNOPOL, "tls handshake error")
