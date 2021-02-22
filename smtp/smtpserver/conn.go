@@ -208,7 +208,8 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	if conn.Debug {
 		log.Printf("server - %s: accepting name: '%s'\n", conn.showClient(), hostname)
 	}
-	if extended && conn.tlsConfig != nil {
+	_, istls := conn.conn.(*tls.Conn)
+	if extended && conn.tlsConfig != nil && !istls {
 		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
