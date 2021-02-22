@@ -128,7 +128,7 @@ func (c *SmtpClient) StartTLS() error {
 	if err != nil {
 		return err
 	}
-	_, err = c.readLine(smtp.STATUSOK)
+	_, err = c.readLine(smtp.STATUSRDY)
 	if err != nil {
 		c.Quit()
 		return err
