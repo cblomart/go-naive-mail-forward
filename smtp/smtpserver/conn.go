@@ -44,7 +44,7 @@ func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Proc
 func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, keyfile string, certfile string, debug bool) *Conn {
 	// set tls config
 	var tlsConfig *tls.Config
-	certificate, err := tls.LoadX509KeyPair("server.pem", "server.key")
+	certificate, err := tls.LoadX509KeyPair(certfile, keyfile)
 	if err != nil {
 		log.Printf("server - error initializing tls config: %v", err)
 	} else {
