@@ -150,7 +150,7 @@ func (c *SmtpClient) StartTLS() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("client - %s:%s starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
+	log.Printf("client - %s:%s: starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
 	c.conn = tlsConn
 	return nil
 }

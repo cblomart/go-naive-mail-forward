@@ -351,11 +351,11 @@ func (conn *Conn) data() error {
 	tlsinfos := ""
 	tlsConn, ok := conn.conn.(*tls.Conn)
 	if ok {
-		tlsinfos = fmt.Sprintf("(%s)", tlsinfo.TlsInfo(tlsConn))
+		tlsinfos = fmt.Sprintf(" (%s)", tlsinfo.TlsInfo(tlsConn))
 	}
 	// prepare trace line
 	trace := fmt.Sprintf(
-		"Received: from %s by %s with Golang Naive Mail Forwarder (%s) id %s for %s; %s",
+		"Received: from %s by %s with Golang Naive Mail Forwarder%s id %s for %s; %s",
 		remoteaddr,
 		localaddr,
 		tlsinfos,
