@@ -232,6 +232,9 @@ func (conn *Conn) starttls() error {
 		log.Printf("server - switching to tls")
 	}
 	tlsConn := tls.Server(conn.conn, conn.tlsConfig)
+	if conn.Debug {
+		log.Printf("server - tls handshake")
+	}
 	err := tlsConn.Handshake()
 	if err != nil {
 		log.Printf("server - %s: failed to start tls connection %s", conn.showClient(), err.Error())
