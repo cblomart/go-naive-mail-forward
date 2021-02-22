@@ -15,6 +15,7 @@ import (
 	"net/textproto"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,17 +33,18 @@ type Conn struct {
 	processor  *process.Process
 	domains    []string
 	tlsConfig  *tls.Config
+	dnsbl      []string
 }
 
 var DomainMatch = regexp.MustCompile("^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$")
 
-func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, keyfile string, certfile string, debug bool) {
-	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, keyfile, certfile, debug)
+func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, debug bool) {
+	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, dnsbl, keyfile, certfile, debug)
 	defer smtpConn.Close()
 	smtpConn.ProcessMessages()
 }
 
-func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, keyfile string, certfile string, debug bool) *Conn {
+func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, debug bool) *Conn {
 	// set tls config
 	var tlsConfig *tls.Config
 	certificate, err := tls.LoadX509KeyPair(certfile, keyfile)
@@ -65,6 +67,7 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 		processor:  processor,
 		domains:    domains,
 		tlsConfig:  tlsConfig,
+		dnsbl:      strings.Split(dnsbl, ","),
 	}
 }
 
@@ -189,14 +192,21 @@ func (conn *Conn) unknown(command string) error {
 func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	// user lowercased hostname
 	hostname = strings.ToLower(hostname)
+	// check proper domain name
 	if !DomainMatch.MatchString(hostname) {
 		// regex failed
 		log.Printf("server - %s: failed to verify: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
+	// check that this is not myself
 	if strings.ToUpper(strings.TrimRight(conn.ServerName, ".")) == strings.ToUpper(strings.TrimRight(hostname, ".")) {
 		// greeted with my name... funny
 		log.Printf("server - %s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
+		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+	}
+	// cehck balacklist
+	if conn.checkdnsbl() {
+		log.Printf("server - %s: known bad actor: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	conn.hello = true
@@ -209,6 +219,69 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
+}
+
+func (conn *Conn) checkdnsbl() bool {
+	// determine what needs to be resolved
+	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
+	if !ok {
+		// should allways be called via TCP
+		return false
+	}
+	prefix := ""
+	if tcpaddr.IP.To16() != nil {
+		// ipv6
+		ip6parts := strings.Split(tcpaddr.IP.String(), ":")
+		var sb strings.Builder
+		for i := range ip6parts {
+			for {
+				if len(ip6parts[i]) == 4 {
+					break
+				}
+				ip6parts[i] = "0" + ip6parts[i]
+			}
+			sb.WriteString(ip6parts[i])
+		}
+		ip6 := sb.String()
+		sb.Reset()
+		for i := len(ip6) - 1; i >= 0; i-- {
+			sb.WriteByte(ip6[i])
+			if i > 0 {
+				sb.WriteRune('.')
+			}
+		}
+		prefix = sb.String()
+	} else {
+		// ipv4
+		prefix = strings.Join(Reverse(strings.Split(tcpaddr.IP.String(), ".")), ".")
+	}
+	// check in //
+	var wg sync.WaitGroup
+	wg.Add(len(conn.dnsbl))
+	okChan := make(chan bool, len(conn.dnsbl))
+	for _, bl := range conn.dnsbl {
+		go func(blacklist string) {
+			defer wg.Done()
+			tocheck := fmt.Sprintf("%s.%s", prefix, blacklist)
+			if conn.Debug {
+				log.Printf("server - %s: dns black list looking for %s", conn.showClient(), tocheck)
+			}
+			ars, err := net.LookupIP(tocheck)
+			if err == nil && len(ars) > 0 {
+				okChan <- true
+				return
+			}
+			okChan <- false
+		}(bl)
+	}
+	wg.Wait()
+	close(okChan)
+	for v := range okChan {
+		if v {
+			return v
+		}
+	}
+	return false
 }
 
 func (conn *Conn) noop() error {

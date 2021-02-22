@@ -27,6 +27,7 @@ var (
 	keyfile    string
 	certfile   string
 	gencert    bool
+	dnsbl      string
 )
 
 func init() {
@@ -40,6 +41,7 @@ func init() {
 	flag.BoolVar(&debug, "d", false, "show debug messages")
 	flag.StringVar(&forwards, "rules", "", "rules to apply")
 	flag.StringVar(&forwards, "r", "", "rules to apply")
+	flag.StringVar(&dnsbl, "dnsbl", "zen.spamhaus.org", "dns blackhole list (comma separated)")
 	flag.StringVar(&interval, "interval", "60s", "interval between sends")
 	flag.StringVar(&interval, "i", "60s", "interval between sends")
 	flag.StringVar(&keyfile, "key", "./smtp.key", "certificate key file (no password)")
@@ -86,6 +88,6 @@ func main() {
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		go smtpserver.HandleSmtpConn(conn, servername, msgProcessor, domains, keyfile, certfile, debug)
+		go smtpserver.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, debug)
 	}
 }
