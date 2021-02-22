@@ -84,7 +84,7 @@ func GenCert(host, keyfile, certfile string) error {
 		template.DNSNames = append(template.DNSNames, host)
 	}
 
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.PublicKey, priv)
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
 	if err != nil {
 		return fmt.Errorf("failed to create certificate: %v", err)
 	}
