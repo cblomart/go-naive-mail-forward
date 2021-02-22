@@ -235,10 +235,10 @@ func (conn *Conn) checkdnsbl() bool {
 		return false
 	}
 	prefix := ""
-	tmp := tcpaddr.IP.To16()
-	if tmp != nil {
+	tmp := tcpaddr.String()
+	if strings.Index(tmp, ":") >= 0 {
 		// ipv6
-		ip6parts := strings.Split(tcpaddr.IP.String(), ":")
+		ip6parts := strings.Split(tmp, ":")
 		var sb strings.Builder
 		for i := range ip6parts {
 			for {
