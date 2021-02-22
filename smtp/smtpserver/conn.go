@@ -228,12 +228,19 @@ func (conn *Conn) rset() error {
 }
 
 func (conn *Conn) starttls() error {
+	tlsConn, ok := conn.conn.(*tls.Conn)
+	if ok {
+		return conn.send(smtp.STATUSNOTIMP, "connction already tls")
+	}
+	if conn.tlsConfig == nil {
+		return conn.send(smtp.STATUSNOTIMP, "tls not supported")
+	}
 	if conn.Debug {
 		log.Printf("server - switching to tls")
 	}
 	// ready for TLS
 	err := conn.send(smtp.STATUSRDY, "ready to discuss privately")
-	tlsConn := tls.Server(conn.conn, conn.tlsConfig)
+	tlsConn = tls.Server(conn.conn, conn.tlsConfig)
 	if conn.Debug {
 		log.Printf("server - tls handshake")
 	}
@@ -246,13 +253,32 @@ func (conn *Conn) starttls() error {
 		log.Printf("server - %s: failed to start tls connection %s", conn.showClient(), err.Error())
 		return conn.send(smtp.STATUSNOPOL, "tls handshake error")
 	}
-	log.Printf("server - %s: starttls complete", conn.showClient())
+	log.Printf("server - %s: starttls complete (%s)", conn.showClient(), TlsInfo(tlsConn))
 	// reset state
 	conn.hello = false
 	conn.conn = tlsConn
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
 	return nil
+}
+
+func TlsInfo(c *tls.Conn) string {
+	tlsVer := ""
+	switch c.ConnectionState().Version {
+	case tls.VersionSSL30:
+		tlsVer = "sslv3"
+	case tls.VersionTLS10:
+		tlsVer = "tls1.0"
+	case tls.VersionTLS11:
+		tlsVer = "tls1.1"
+	case tls.VersionTLS12:
+		tlsVer = "tls1.2"
+	case tls.VersionTLS13:
+		tlsVer = "tls1.3"
+	}
+	tlsCypher := tls.CipherSuiteName(c.ConnectionState().CipherSuite)
+	return fmt.Sprintf("version=%s,cypher=%s", tlsVer, tlsCypher)
+
 }
 
 func (conn *Conn) mailfrom(param string) error {
