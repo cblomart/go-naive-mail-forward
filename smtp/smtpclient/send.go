@@ -14,15 +14,16 @@ import (
 )
 
 type SmtpClient struct {
-	conn      net.Conn
-	LocalPort string
-	Relay     string
-	Domains   []string
-	Hostname  string
-	Debug     bool
-	lock      *sync.Mutex
-	Connected bool
-	LastSent  time.Time
+	conn         net.Conn
+	LocalPort    string
+	Relay        string
+	Domains      []string
+	Hostname     string
+	Debug        bool
+	lock         *sync.Mutex
+	Connected    bool
+	LastSent     time.Time
+	tlsSupported bool
 }
 
 func (c *SmtpClient) Connect() error {
@@ -57,9 +58,7 @@ func (c *SmtpClient) Connect() error {
 func (c *SmtpClient) Close() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	if c.Debug {
-		log.Printf("client - disconnecting from %s", c.Relay)
-	}
+	log.Printf("client - disconnecting from %s", c.Relay)
 	if c.conn != nil {
 		c.Connected = false
 		c.Quit()
@@ -68,11 +67,14 @@ func (c *SmtpClient) Close() error {
 	return nil
 }
 
-func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) error {
-	if fmt.Sprintf("%d ", expcode) != line[:4] {
-		return fmt.Errorf("unexpexted error code returned %d", expcode)
+func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) (string, error) {
+	if fmt.Sprintf("%d", expcode) != line[:3] {
+		return "", fmt.Errorf("unexpexted error code returned %d", expcode)
 	}
-	return nil
+	if line[4] == '-' {
+		return line[4:], nil
+	}
+	return "", nil
 }
 
 func (c *SmtpClient) sendCmd(command string) error {
@@ -89,16 +91,26 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 	reader := bufio.NewReader(c.conn)
 	// get a text proto reader
 	tp := textproto.NewReader(reader)
-	line, err := tp.ReadLine()
-	if err != nil {
-		return "", err
-	}
-	if c.Debug {
-		log.Printf("client - %s:%s: < %s", c.LocalPort, c.Relay, line)
-	}
-	err = c.checkSmtpRespCode(code, line)
-	if err != nil {
-		return "", err
+	var err error
+	line := ""
+	for {
+		line, err = tp.ReadLine()
+		if err != nil {
+			return "", err
+		}
+		if c.Debug {
+			log.Printf("client - %s:%s: < %s", c.LocalPort, c.Relay, line)
+		}
+		ext, err := c.checkSmtpRespCode(code, line)
+		if err != nil {
+			return "", err
+		}
+		if len(ext) == 0 {
+			break
+		}
+		if strings.ToUpper(ext) == "STARTTLS" {
+			c.tlsSupported = true
+		}
 	}
 	return line, nil
 }
@@ -110,7 +122,17 @@ func (c *SmtpClient) Quit() error {
 func (c *SmtpClient) Helo() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	err := c.sendCmd(fmt.Sprintf("HELO %s", c.Hostname))
+	// try ehlo first
+	err := c.sendCmd(fmt.Sprintf("EHLO %s", c.Hostname))
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSOK)
+	if err == nil {
+		return nil
+	}
+	// try helo next
+	err = c.sendCmd(fmt.Sprintf("HELO %s", c.Hostname))
 	if err != nil {
 		return err
 	}
