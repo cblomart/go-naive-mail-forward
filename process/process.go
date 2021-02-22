@@ -67,16 +67,18 @@ func remove(s []int, i int) []int {
 
 func (p *Process) checkPools() {
 	// clean current pool
-	p.cleanPool()
+	c1 := p.cleanPool()
 	// keepalive current pool
 	p.keepAlivePool()
 	// clean lingering connections that may have tripped
-	p.cleanPool()
+	c2 := p.cleanPool()
 	// now we should be good
-	p.reportPool()
+	if c1 || c2 || p.Debug {
+		p.reportPool()
+	}
 }
 
-func (p *Process) cleanPool() {
+func (p *Process) cleanPool() bool {
 	p.poolLock.Lock()
 	defer p.poolLock.Unlock()
 	// suppose lock was already aquired
@@ -108,6 +110,7 @@ func (p *Process) cleanPool() {
 		// remove the last element of the slice
 		p.smtpPool = p.smtpPool[:len(p.smtpPool)-1]
 	}
+	return len(toRemove) > 0
 }
 
 func (p *Process) keepAlivePool() {
