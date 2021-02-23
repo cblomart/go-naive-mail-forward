@@ -161,6 +161,9 @@ func NewRule(rule string) (*Rule, error) {
 	r.FromUser = regexp.MustCompile(regex)
 	r.To = []address.MailAddress{}
 	for _, addr := range parts[1:] {
+		if Debug {
+			log.Printf("rules - checking target %s", addr)
+		}
 		addrParts := strings.Split(addr, "@")
 		if len(addrParts) != 2 {
 			log.Printf("rules - invalid target address: %s", addr)
