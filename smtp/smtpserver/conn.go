@@ -22,6 +22,10 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	TLSMinVer = tls.VersionTLS12
+)
+
 var (
 	Trace = false
 	Debug = false
@@ -59,6 +63,7 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 	} else {
 		tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{certificate},
+			MinVersion:   TLSMinVer,
 		}
 	}
 	return &Conn{
