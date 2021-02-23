@@ -236,7 +236,7 @@ func (conn *Conn) checkdnsbl() bool {
 	}
 	prefix := ""
 	tmp := tcpaddr.String()
-	if strings.Index(tmp, ":") >= 0 {
+	/*if strings.Index(tmp, ":") >= 0 {
 		var sb strings.Builder
 		ip6 := ExpandIp6(tmp)
 		for i := len(ip6) - 1; i >= 0; i-- {
@@ -247,10 +247,10 @@ func (conn *Conn) checkdnsbl() bool {
 		}
 		prefix = sb.String()
 
-	} else {
-		// ipv4
-		prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
-	}
+	} else {*/
+	// ipv4
+	prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
+	//}
 	if len(prefix) == 0 {
 		return false
 	}
