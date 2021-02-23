@@ -23,8 +23,9 @@ import (
 )
 
 var (
-	Trace = false
-	Debug = false
+	Trace       = false
+	Debug       = false
+	TlsInsecure = true
 )
 
 //Conn is a smtp client connection
@@ -59,7 +60,7 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 	} else {
 		tlsConfig = &tls.Config{
 			Certificates:       []tls.Certificate{certificate},
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: TlsInsecure,
 		}
 	}
 	return &Conn{
@@ -112,7 +113,7 @@ func (conn *Conn) ProcessMessages() {
 			}
 			err = nerr
 		case "STARTTLS":
-			conn.starttls()
+			err = conn.starttls()
 		case "NOOP":
 			err = conn.noop()
 		case "RSET":

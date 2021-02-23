@@ -99,6 +99,7 @@ func (p *Process) cleanPool() bool {
 	sort.Sort(sort.Reverse(sort.IntSlice(toRemove)))
 	for _, i := range toRemove {
 		if p.smtpPool[i].Connected {
+			// #nosec G104 ignore close issues
 			p.smtpPool[i].Close()
 		}
 		// set element to remove to the last one
@@ -114,6 +115,7 @@ func (p *Process) keepAlivePool() {
 	defer p.poolLock.RUnlock()
 	for _, client := range p.smtpPool {
 		if client.Connected {
+			// #nosec G104 ignore noop issues
 			client.Noop()
 		}
 	}

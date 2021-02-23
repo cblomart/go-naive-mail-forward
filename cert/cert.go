@@ -100,7 +100,7 @@ func GenCert(host, keyfile, certfile string) error {
 		return fmt.Errorf("error closing %s: %v", certfile, err)
 	}
 
-	keyOut, err := os.OpenFile(keyfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	keyOut, err := os.Create(keyfile)
 	if err != nil {
 		return fmt.Errorf("failed to open %s for writing: %v", keyfile, err)
 	}

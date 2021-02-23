@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	Trace = false
-	Debug = false
+	Trace       = false
+	Debug       = false
+	TlsInsecure = true
 )
 
 type SmtpClient struct {
@@ -54,6 +55,7 @@ func (c *SmtpClient) Connect() error {
 	// read ack from server
 	_, err = c.readLine(smtp.STATUSRDY)
 	if err != nil {
+		// #nosec G104 ignore quit
 		c.Quit()
 		return err
 	}
@@ -67,6 +69,7 @@ func (c *SmtpClient) Close() error {
 	log.Printf("client - disconnecting from %s", c.Relay)
 	if c.conn != nil {
 		c.Connected = false
+		// #nosec G104 ignore quit
 		c.Quit()
 		return c.conn.Close()
 	}
@@ -134,6 +137,7 @@ func (c *SmtpClient) StartTLS() error {
 	}
 	_, err = c.readLine(smtp.STATUSRDY)
 	if err != nil {
+		// #nosec G104 ignore quit
 		c.Quit()
 		return err
 	}
@@ -144,7 +148,7 @@ func (c *SmtpClient) StartTLS() error {
 	tlsConn := tls.Client(
 		c.conn,
 		&tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: TlsInsecure,
 		},
 	)
 	if Debug {
@@ -180,6 +184,7 @@ func (c *SmtpClient) Helo() error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
+		// #nosec G104 ignore quit
 		c.Quit()
 		return err
 	}
@@ -195,6 +200,7 @@ func (c *SmtpClient) Noop() error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
+		// #nosec G104 ignore quit
 		c.Quit()
 		return err
 	}
@@ -208,6 +214,7 @@ func (c *SmtpClient) MailFrom(dest string) error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
+		// #nosec G104 ignore quit
 		c.Quit()
 		return err
 	}
@@ -221,6 +228,7 @@ func (c *SmtpClient) RcptTo(dest string) error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
+		// #nosec G104 ignore quit
 		c.Quit()
 		return err
 	}
@@ -238,6 +246,7 @@ func (c *SmtpClient) Data(data string) error {
 	}
 	_, err = c.readLine(smtp.STATUSACT)
 	if err != nil {
+		// #nosec G104 ignore quit
 		c.Quit()
 		return err
 	}
@@ -262,6 +271,7 @@ func (c *SmtpClient) Data(data string) error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
+		// #nosec G104 ignore quit
 		c.Quit()
 		return err
 	}
