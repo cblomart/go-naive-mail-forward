@@ -15,10 +15,6 @@ import (
 	"time"
 )
 
-const (
-	TLSMinVer = tls.VersionTLS12
-)
-
 var (
 	Trace = false
 	Debug = false
@@ -151,7 +147,7 @@ func (c *SmtpClient) StartTLS() error {
 	tlsConn := tls.Client(
 		c.conn,
 		&tls.Config{
-			MinVersion: TLSMinVer,
+			MinVersion: tls.VersionTLS12,
 		},
 	)
 	if Debug {

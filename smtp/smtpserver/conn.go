@@ -22,10 +22,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	TLSMinVer = tls.VersionTLS12
-)
-
 var (
 	Trace = false
 	Debug = false
