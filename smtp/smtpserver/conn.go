@@ -427,6 +427,10 @@ func (conn *Conn) data() error {
 		log.Printf("server - %s: refusing data without 'from' and 'to'", conn.showClient())
 		return conn.send(smtp.STATUSBADSEC, "please tell me from/to before sending a message")
 	}
+	_, isTls := conn.conn.(*tls.Conn)
+	if !isTls {
+		log.Printf("server - %s: recieving message over clear text!", conn.showClient())
+	}
 	err := conn.send(smtp.STATUSACT, "shoot")
 	if err != nil {
 		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())

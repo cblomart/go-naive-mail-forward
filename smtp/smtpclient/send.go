@@ -224,6 +224,10 @@ func (c *SmtpClient) RcptTo(dest string) error {
 }
 
 func (c *SmtpClient) Data(data string) error {
+	_, isTls := c.conn.(*tls.Conn)
+	if !isTls {
+		log.Printf("client - %s:%s: sending message over clear text!", c.LocalPort, c.Relay)
+	}
 	err := c.sendCmd("DATA")
 	if err != nil {
 		return err
