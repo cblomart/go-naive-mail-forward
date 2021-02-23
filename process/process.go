@@ -61,12 +61,6 @@ func (p *Process) ManagePools() {
 	}()
 }
 
-func remove(s []int, i int) []int {
-	s[i] = s[len(s)-1]
-	// We do not need to put s[i] at the end, as it will be discarded anyway
-	return s[:len(s)-1]
-}
-
 func (p *Process) checkPools() {
 	// clean current pool
 	c1 := p.cleanPool()
@@ -97,7 +91,7 @@ func (p *Process) cleanPool() bool {
 		}
 		if p.smtpPool[i].LastSent.Before(minLastSent) {
 			if Debug {
-				log.Printf("process - removing timedout mx %s (%s)", p.smtpPool[i].Relay, time.Now().Sub(p.smtpPool[i].LastSent).String())
+				log.Printf("process - removing timedout mx %s (%s)", p.smtpPool[i].Relay, time.Since(p.smtpPool[i].LastSent).String())
 			}
 			toRemove = append(toRemove, i)
 		}
@@ -135,7 +129,7 @@ func (p *Process) reportPool() {
 		return
 	}
 	for _, client := range p.smtpPool {
-		log.Printf("process - smtp connection (server/domains/lastsent): %s/%s/%s", client.Relay, strings.Join(client.Domains, ","), time.Now().Sub(client.LastSent).String())
+		log.Printf("process - smtp connection (server/domains/lastsent): %s/%s/%s", client.Relay, strings.Join(client.Domains, ","), time.Since(client.LastSent).String())
 	}
 }
 

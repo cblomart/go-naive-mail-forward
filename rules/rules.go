@@ -101,7 +101,7 @@ func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 	if Debug {
 		log.Printf("rules - original addresses %v", toAddr)
 	}
-	if strings.ToUpper(strings.TrimRight(ma.Domain, ".")) != strings.ToUpper(strings.TrimRight(r.Domain, ".")) {
+	if !strings.EqualFold(strings.TrimRight(ma.Domain, "."), strings.TrimRight(r.Domain, ".")) {
 		return nil
 	}
 	// check match with inverstion

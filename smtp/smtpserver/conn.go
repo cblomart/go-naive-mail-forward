@@ -41,7 +41,7 @@ type Conn struct {
 	dnsbl      []string
 }
 
-var DomainMatch = regexp.MustCompile("^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$")
+var DomainMatch = regexp.MustCompile(`^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$`)
 
 func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string) {
 	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, dnsbl, keyfile, certfile)
@@ -203,7 +203,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	// check that this is not myself
-	if strings.ToUpper(strings.TrimRight(conn.ServerName, ".")) == strings.ToUpper(strings.TrimRight(hostname, ".")) {
+	if strings.EqualFold(strings.TrimRight(conn.ServerName, "."), strings.TrimRight(hostname, ".")) {
 		// greeted with my name... funny
 		log.Printf("server - %s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
@@ -240,7 +240,7 @@ func (conn *Conn) checkdnsbl() bool {
 	}
 	prefix := ""
 	tmp := tcpaddr.IP.String()
-	if strings.Index(tmp, ":") >= 0 {
+	if strings.Contains(tmp, ":") {
 		var sb strings.Builder
 		ip6 := ExpandIp6(tmp)
 		for i := len(ip6) - 1; i >= 0; i-- {
@@ -294,7 +294,7 @@ func (conn *Conn) checkdnsbl() bool {
 }
 
 func ExpandIp6(shortip6 string) string {
-	if strings.Index(shortip6, "::") >= 0 {
+	if strings.Contains(shortip6, "::") {
 		ip6s := 0
 		for _, c := range shortip6 {
 			if c == ':' {
@@ -335,7 +335,7 @@ func (conn *Conn) rset() error {
 func (conn *Conn) starttls() error {
 	tlsConn, ok := conn.conn.(*tls.Conn)
 	if ok {
-		return conn.send(smtp.STATUSNOTIMP, "connction already tls")
+		return conn.send(smtp.STATUSNOTIMP, "connection already tls")
 	}
 	if conn.tlsConfig == nil {
 		return conn.send(smtp.STATUSNOTIMP, "tls not supported")
@@ -352,7 +352,7 @@ func (conn *Conn) starttls() error {
 	err = tlsConn.Handshake()
 	if err != nil {
 		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
-		return fmt.Errorf("Cannot read")
+		return fmt.Errorf("cannot read")
 	}
 	if err != nil {
 		log.Printf("server - %s: failed to start tls connection %s", conn.showClient(), err.Error())
@@ -391,7 +391,7 @@ func (conn *Conn) rcptto(param string) error {
 	}
 	acceptedDomain := false
 	for _, domain := range conn.domains {
-		if strings.ToUpper(strings.TrimRight(ma.Domain, ".")) == strings.ToUpper(strings.TrimRight(domain, ".")) {
+		if strings.EqualFold(strings.TrimRight(ma.Domain, "."), strings.TrimRight(domain, ".")) {
 			acceptedDomain = true
 			break
 		}
@@ -403,7 +403,7 @@ func (conn *Conn) rcptto(param string) error {
 	// check if recipient already given
 	found := false
 	for _, to := range conn.rcptTo {
-		if strings.ToUpper(strings.TrimRight(to.String(), ".")) == strings.ToUpper(strings.TrimRight(param, ".")) {
+		if strings.EqualFold(strings.TrimRight(to.String(), "."), strings.TrimRight(param, ".")) {
 			found = true
 			break
 		}
@@ -438,7 +438,7 @@ func (conn *Conn) data() error {
 	err := conn.send(smtp.STATUSACT, "shoot")
 	if err != nil {
 		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
-		return fmt.Errorf("Cannot read")
+		return fmt.Errorf("cannot read")
 	}
 	// get a buffer reader
 	reader := bufio.NewReader(conn.conn)
@@ -480,10 +480,10 @@ func (conn *Conn) data() error {
 		line, err := tp.ReadLine()
 		if err != nil {
 			if err == io.EOF {
-				return fmt.Errorf("Connection dropped")
+				return fmt.Errorf("connection dropped")
 			}
 			log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
-			return fmt.Errorf("Cannot read")
+			return fmt.Errorf("cannot read")
 		}
 		if Debug {
 			log.Printf("server - %s < %s\n", conn.showClient(), line)
@@ -547,10 +547,10 @@ func (conn *Conn) request() (string, string, error) {
 	command, err := tp.ReadLine()
 	if err != nil {
 		if err == io.EOF {
-			return "", "", fmt.Errorf("Connection dropped")
+			return "", "", fmt.Errorf("connection dropped")
 		}
 		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
-		return "", "", fmt.Errorf("Cannot read")
+		return "", "", fmt.Errorf("cannot read")
 	}
 	if !IsAsciiPrintable(command) {
 		log.Printf("server - %s: command contains non ascii printable characters\n", conn.showClient())

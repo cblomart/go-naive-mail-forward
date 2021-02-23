@@ -59,7 +59,7 @@ func GenCert(host, keyfile, certfile string) error {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		return fmt.Errorf("Failed to generate serial number: %v", err)
+		return fmt.Errorf("failed to generate serial number: %v", err)
 
 	}
 
