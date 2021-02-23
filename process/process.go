@@ -137,18 +137,22 @@ func (p *Process) reportPool() {
 	}
 }
 
-func (p *Process) Handle(msg message.Message) (string, error) {
+func (p *Process) Handle(msg message.Message) (string, bool, error) {
 	// id the message
 	if len(msg.Id) == 0 {
 		msg.Id = uuid.NewString()
 	}
 	// check that message is signed
 	if !msg.Signed() {
-		log.Printf("process - %s: message is not signed", msg.Id)
-		return "", fmt.Errorf("message is not signed")
+		log.Printf("process - %s: message is not signed!", msg.Id)
 	}
 	// update recipients following rules
 	p.rules.UpdateMessage(&msg)
+	// if destination doesn't go anywhere return an error
+	if len(msg.To) == 0 {
+		log.Printf("process - %s: message has no destination", msg.Id)
+		return "", true, fmt.Errorf("no recipients")
+	}
 	if p.Debug {
 		log.Printf("process - %s: mapping smtp relays to send to", msg.Id)
 	}
@@ -314,9 +318,9 @@ func (p *Process) Handle(msg message.Message) (string, error) {
 	}
 	// return result
 	if !result {
-		return msg.Id, fmt.Errorf("could not send message to all relays")
+		return msg.Id, false, fmt.Errorf("could not send message to all relays")
 	}
-	return msg.Id, nil
+	return msg.Id, false, nil
 }
 
 func SendAsync(client smtpclient.SmtpClient, msg message.Message, wg *sync.WaitGroup, okChan chan bool) {

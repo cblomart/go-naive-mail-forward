@@ -507,9 +507,12 @@ func (conn *Conn) data() error {
 		log.Printf("server - %s: message %s is not signed and refused by SPF checks", conn.showClient(), msg.Id)
 		return conn.send(smtp.STATUSERROR, "spf failed")
 	}
-	msgId, err := conn.processor.Handle(msg)
+	msgId, reject, err := conn.processor.Handle(msg)
 	if err != nil {
 		log.Printf("server - %s:%s: error handling message: %s", conn.showClient(), msgId, err.Error())
+		if reject {
+			return conn.send(smtp.STATUSNOPOL, "mail rejected")
+		}
 		return conn.send(smtp.STATUSTMPER, "could not handle message")
 	}
 	log.Printf("server - %s: message %s recieved", conn.showClient(), msg.Id)
