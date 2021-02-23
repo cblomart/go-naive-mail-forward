@@ -131,25 +131,28 @@ func NewRule(rule string) (*Rule, error) {
 	if len(fromParts[0]) == 0 {
 		fromParts[0] = "*"
 	}
-	r.FromUser = regexp.MustCompile(strings.Replace(fromParts[0], "*", "[0-9A-Za-z_]*", -1))
+	regex := strings.Replace(fromParts[0], "*", "[0-9A-Za-z_]*", -1)
+	if regex[0] != '^' {
+		regex = fmt.Sprintf("^%s", regex)
+	}
+	if regex[len(regex)-1] != '$' {
+		regex = fmt.Sprintf("%s$", regex)
+	}
+	r.FromUser = regexp.MustCompile(regex)
 	r.To = []address.MailAddress{}
 	for _, addr := range parts[1:] {
-		if strings.Index(addr, "@") >= 0 {
-			// full mail address
-			ma, err := address.NewMailAddress(addr)
-			if err != nil {
-				log.Printf("rules - invalid address: %s", addr)
-				continue
-			}
-			r.To = append(r.To, *ma)
-		} else {
-			// domain only
-			if address.DomainMatch.MatchString(addr) {
-				r.To = append(r.To, address.MailAddress{Domain: addr})
-			} else {
-				log.Printf("rules - invalid domain: %s", addr)
-			}
+		addrParts := strings.Split(addr, "@")
+		if len(addrParts) != 2 {
+			log.Printf("rules - invalid target address: %s", addr)
+			continue
 		}
+		user := addrParts[0]
+		domain := addrParts[1]
+		if !address.DomainMatch.MatchString(domain) {
+			log.Printf("rules - invalid target domain: %s", addr)
+			continue
+		}
+		r.To = append(r.To, address.MailAddress{Domain: domain, User: user})
 	}
 	return r, nil
 }
