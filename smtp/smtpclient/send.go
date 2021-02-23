@@ -145,10 +145,10 @@ func (c *SmtpClient) StartTLS() error {
 	if Debug {
 		log.Printf("client - %s:%s: switching to tls", c.LocalPort, c.Relay)
 	}
+	// #nosec G402 ignore tls verification
 	tlsConn := tls.Client(
 		c.conn,
 		&tls.Config{
-			// #nosec G402 ignore tls verification
 			InsecureSkipVerify: TlsInsecure,
 		},
 	)
