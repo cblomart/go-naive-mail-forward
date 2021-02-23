@@ -26,7 +26,6 @@ type SmtpClient struct {
 	Relay        string
 	Domains      []string
 	Hostname     string
-	Debug        bool
 	lock         *sync.Mutex
 	Connected    bool
 	LastSent     time.Time
@@ -41,7 +40,7 @@ func (c *SmtpClient) Connect() error {
 	// get local port
 	parts := strings.Split(conn.LocalAddr().String(), ":")
 	c.LocalPort = parts[len(parts)-1]
-	if c.Debug {
+	if Debug {
 		log.Printf("client - %s:%s: connected", c.LocalPort, c.Relay)
 	}
 	c.conn = conn
@@ -85,7 +84,7 @@ func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) (bool, error) {
 }
 
 func (c *SmtpClient) sendCmd(command string) error {
-	if c.Debug {
+	if Trace {
 		log.Printf("client - %s:%s: > %s", c.LocalPort, c.Relay, command)
 	}
 	_, err := fmt.Fprintf(c.conn, "%s\r\n", command)
@@ -105,7 +104,7 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if c.Debug {
+		if Trace {
 			log.Printf("client - %s:%s: < %s", c.LocalPort, c.Relay, line)
 		}
 		more, err := c.checkSmtpRespCode(code, line)
@@ -139,7 +138,7 @@ func (c *SmtpClient) StartTLS() error {
 		return err
 	}
 	// build the tls connection
-	if c.Debug {
+	if Debug {
 		log.Printf("client - %s:%s: switching to tls", c.LocalPort, c.Relay)
 	}
 	tlsConn := tls.Client(
@@ -148,14 +147,14 @@ func (c *SmtpClient) StartTLS() error {
 			InsecureSkipVerify: true,
 		},
 	)
-	if c.Debug {
+	if Debug {
 		log.Printf("client - %s:%s: tls handshake", c.LocalPort, c.Relay)
 	}
 	err = tlsConn.Handshake()
 	if err != nil {
 		return err
 	}
-	if c.Debug {
+	if Debug {
 		log.Printf("client - %s:%s: starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
 	}
 	c.conn = tlsConn
@@ -246,7 +245,7 @@ func (c *SmtpClient) Data(data string) error {
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if c.Debug {
+		if Debug {
 			log.Printf("client - %s:%s: > %s", c.LocalPort, c.Relay, line)
 		}
 		_, err := fmt.Fprintf(c.conn, "%s\r\n", line)
@@ -254,7 +253,7 @@ func (c *SmtpClient) Data(data string) error {
 			return err
 		}
 	}
-	if c.Debug {
+	if Debug {
 		log.Printf("client - %s:%s: > .", c.LocalPort, c.Relay)
 	}
 	_, err = fmt.Fprint(c.conn, ".\r\n")
@@ -272,7 +271,7 @@ func (c *SmtpClient) Data(data string) error {
 func (c *SmtpClient) SendMessage(msg message.Message) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	if c.Debug {
+	if Debug {
 		log.Printf("client - %s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
 	}
 	// sent mail from
@@ -289,7 +288,7 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 	}
 	// prepare relay for fqdn check
 	for _, to := range tos {
-		if c.Debug {
+		if Debug {
 			log.Printf("client - %s:%s:%s adding recipient %s", c.LocalPort, c.Relay, msg.Id, to)
 		}
 		err = c.RcptTo(to)
@@ -318,7 +317,6 @@ func SendMessages(hostname string, domain string, msgs []message.Message, debug 
 	client := &SmtpClient{
 		Relay:    mxs[0].Host,
 		Domains:  []string{domain},
-		Debug:    debug,
 		Hostname: hostname,
 	}
 	// connect to server

@@ -43,13 +43,13 @@ type Conn struct {
 
 var DomainMatch = regexp.MustCompile("^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$")
 
-func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, debug bool) {
-	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, dnsbl, keyfile, certfile, debug)
+func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string) {
+	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, dnsbl, keyfile, certfile)
 	defer smtpConn.Close()
 	smtpConn.ProcessMessages()
 }
 
-func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, debug bool) *Conn {
+func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string) *Conn {
 	// set tls config
 	var tlsConfig *tls.Config
 	certificate, err := tls.LoadX509KeyPair(certfile, keyfile)
@@ -66,7 +66,6 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 		hello:      false,
 		clientName: "",
 		ServerName: serverName,
-		Debug:      debug,
 		mailFrom:   nil,
 		rcptTo:     make([]address.MailAddress, 0),
 		processor:  processor,
@@ -81,7 +80,7 @@ func (conn *Conn) Close() error {
 }
 
 func (conn *Conn) ProcessMessages() {
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: new connection\n", conn.showClient())
 	}
 	// acknowlege the new comer
@@ -97,7 +96,7 @@ func (conn *Conn) ProcessMessages() {
 			log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 			break
 		}
-		if conn.Debug {
+		if Debug {
 			log.Printf("server - %s: got command: '%s'\n", conn.showClient(), cmd)
 			log.Printf("server - %s: got params: '%s'\n", conn.showClient(), params)
 		}
@@ -169,7 +168,7 @@ func (conn *Conn) showClient() string {
 func (conn *Conn) send(status int, message string, extra ...string) error {
 	if len(extra) > 0 {
 		for _, e := range extra {
-			if conn.Debug {
+			if Debug {
 				log.Printf("server - %s > %d-%s\n", conn.showClient(), status, e)
 			}
 			_, err := fmt.Fprintf(conn.conn, "%d-%s\r\n", status, e)
@@ -178,7 +177,7 @@ func (conn *Conn) send(status int, message string, extra ...string) error {
 			}
 		}
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s > %d %s\n", conn.showClient(), status, message)
 	}
 	_, err := fmt.Fprintf(conn.conn, "%d %s\r\n", status, message)
@@ -220,7 +219,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	}
 	conn.hello = true
 	conn.clientName = hostname
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: welcoming name: '%s'\n", conn.showClient(), hostname)
 	}
 	if extended && conn.tlsConfig != nil && !istls {
@@ -230,7 +229,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 }
 
 func (conn *Conn) checkdnsbl() bool {
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: dns black list check", conn.showClient())
 	}
 	// determine what needs to be resolved
@@ -257,12 +256,12 @@ func (conn *Conn) checkdnsbl() bool {
 		prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
 	}
 	if len(prefix) == 0 {
-		if conn.Debug {
+		if Debug {
 			log.Printf("server - %s: black list prefix empty", conn.showClient())
 		}
 		return false
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: black list check prefix %s", conn.showClient(), prefix)
 	}
 	// check in //
@@ -273,7 +272,7 @@ func (conn *Conn) checkdnsbl() bool {
 		go func(blacklist string) {
 			defer wg.Done()
 			tocheck := fmt.Sprintf("%s.%s", prefix, blacklist)
-			if conn.Debug {
+			if Debug {
 				log.Printf("server - %s: dns black list looking for %s", conn.showClient(), tocheck)
 			}
 			ars, err := net.LookupIP(tocheck)
@@ -325,7 +324,7 @@ func (conn *Conn) noop() error {
 }
 
 func (conn *Conn) rset() error {
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: reseting status", conn.showClient())
 	}
 	conn.mailFrom = nil
@@ -341,13 +340,13 @@ func (conn *Conn) starttls() error {
 	if conn.tlsConfig == nil {
 		return conn.send(smtp.STATUSNOTIMP, "tls not supported")
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: switching to tls", conn.showClient())
 	}
 	// ready for TLS
 	err := conn.send(smtp.STATUSRDY, "ready to discuss privately")
 	tlsConn = tls.Server(conn.conn, conn.tlsConfig)
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: tls handshake", conn.showClient())
 	}
 	err = tlsConn.Handshake()
@@ -359,7 +358,7 @@ func (conn *Conn) starttls() error {
 		log.Printf("server - %s: failed to start tls connection %s", conn.showClient(), err.Error())
 		return conn.send(smtp.STATUSNOPOL, "tls handshake error")
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: starttls complete (%s)", conn.showClient(), tlsinfo.TlsInfo(tlsConn))
 	}
 	// reset state
@@ -376,7 +375,7 @@ func (conn *Conn) mailfrom(param string) error {
 		log.Printf("server - %s: mail from %s not valid", conn.showClient(), ma)
 		return conn.send(smtp.STATUSNOPOL, "bad mail address")
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: mail from %s", conn.showClient(), ma)
 	}
 	conn.mailFrom = ma
@@ -416,14 +415,14 @@ func (conn *Conn) rcptto(param string) error {
 	for i, ma := range conn.rcptTo {
 		addresses[i] = ma.String()
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: sending to %s", conn.showClient(), strings.Join(addresses, ";"))
 	}
 	return conn.send(smtp.STATUSOK, "ok")
 }
 
 func (conn *Conn) data() error {
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: recieveing data", conn.showClient())
 	}
 	// check if from and to ar there
@@ -472,7 +471,7 @@ func (conn *Conn) data() error {
 		conn.mailFrom.String(),
 		time.Now().Format("02 Jan 06 15:04:05 MST"),
 	)
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: trace: %s", conn.showClient(), trace)
 	}
 	sb.WriteString(trace)
@@ -486,7 +485,7 @@ func (conn *Conn) data() error {
 			log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 			return fmt.Errorf("Cannot read")
 		}
-		if conn.Debug {
+		if Debug {
 			log.Printf("server - %s < %s\n", conn.showClient(), line)
 		}
 		if line == "." {
@@ -525,7 +524,7 @@ func (conn *Conn) data() error {
 }
 
 func (conn *Conn) quit() error {
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: goodbye", conn.showClient())
 	}
 	return conn.send(smtp.STATUSBYE, "goodbye")
@@ -557,7 +556,7 @@ func (conn *Conn) request() (string, string, error) {
 		log.Printf("server - %s: command contains non ascii printable characters\n", conn.showClient())
 		return "", "", fmt.Errorf("command contains non ascii printable characters")
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s < %s\n", conn.showClient(), command)
 	}
 	sep := " "
@@ -589,17 +588,17 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 	if err == nil {
 		name = names[0]
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: checking spf record for %s against %s", conn.showClient(), domain, tcpaddr.IP.String())
 	}
 	spf, lookups := GetSPF(domain, lookups)
 	if len(spf) == 0 {
-		if conn.Debug {
+		if Debug {
 			log.Printf("server - %s: empty spf for %s", conn.showClient(), domain)
 		}
 		return true, lookups
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: spf record for %s: %s", conn.showClient(), domain, spf)
 	}
 	// do replacement
@@ -665,7 +664,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 		}
 		switch mechanism {
 		case "all":
-			if conn.Debug {
+			if Debug {
 				log.Printf("server - %s: hitting spf catchall for %s", conn.showClient(), domain)
 			}
 			return conn.evalAction(action, domain, fullmechanism), lookups
@@ -805,17 +804,17 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 			if len(param) == 0 {
 				continue
 			}
-			if conn.Debug {
+			if Debug {
 				log.Printf("server - %s: spf for %s, checking include %s", conn.showClient(), domain, param)
 			}
 			return conn.spfCheck(param, lookups)
 		default:
-			if conn.Debug {
+			if Debug {
 				log.Printf("server - %s: ignoring unknown spf mechanism '%s'", conn.showClient(), mechanism)
 			}
 		}
 	}
-	if conn.Debug {
+	if Debug {
 		log.Printf("server - %s: no spf mechanisms matched for %s. defaulting for accept!", conn.showClient(), domain)
 	}
 	return true, lookups
@@ -823,7 +822,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 
 func (conn *Conn) evalAction(action bool, domain, fullmechanism string) bool {
 	if action {
-		if conn.Debug {
+		if Debug {
 			log.Printf("server - %s: %s spf accept at '%s'", conn.showClient(), domain, fullmechanism)
 		}
 		return true

@@ -4,6 +4,7 @@ import (
 	"cblomart/go-naive-mail-forward/cert"
 	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/rules"
+	"cblomart/go-naive-mail-forward/smtp/smtpclient"
 	"cblomart/go-naive-mail-forward/smtp/smtpserver"
 	"flag"
 	"fmt"
@@ -18,7 +19,8 @@ const (
 )
 
 var (
-	debug      bool
+	debug      string
+	trace      string
 	servername string
 	storage    string
 	port       int
@@ -37,8 +39,10 @@ func init() {
 	flag.IntVar(&port, "p", 25, "port to listen to")
 	flag.StringVar(&storage, "storage", "memory", "storage connection")
 	flag.StringVar(&storage, "s", "memory", "storage connection")
-	flag.BoolVar(&debug, "debug", false, "show debug messages")
-	flag.BoolVar(&debug, "d", false, "show debug messages")
+	flag.StringVar(&debug, "debug", "", "show debug messages (comma separarted, server>process>rule>client or all)")
+	flag.StringVar(&debug, "d", "", "show debug messages (comma separarted, server>process>rule>client or all)")
+	flag.StringVar(&trace, "trace", "", "show traces (comma separarted, server,client or all)")
+	flag.StringVar(&trace, "t", "", "show traces  (comma separarted, server,client or all)")
 	flag.StringVar(&forwards, "rules", "", "rules to apply")
 	flag.StringVar(&forwards, "r", "", "rules to apply")
 	flag.StringVar(&dnsbl, "dnsbl", "zen.spamhaus.org", "dns blackhole list (comma separated)")
@@ -52,6 +56,42 @@ func init() {
 func main() {
 	log.Print("Starting Golang Naive Mail Forwarder")
 	flag.Parse()
+
+	// set debugging
+	if debug == "all" {
+		debug = "server,process,rule,client"
+	}
+	for _, comp := range strings.Split(debug, ",") {
+		log.Printf("enabling debugging for %s", comp)
+		switch comp {
+		case "server":
+			smtpserver.Debug = true
+		case "process":
+			process.Debug = true
+		case "rule":
+			rules.Debug = true
+		case "client":
+			smtpclient.Debug = true
+		default:
+			log.Printf("unknown component: %s", comp)
+		}
+	}
+
+	// set tracing
+	if trace == "all" {
+		trace = "server,client"
+	}
+	for _, comp := range strings.Split(debug, ",") {
+		log.Printf("enabling tracing for %s", comp)
+		switch comp {
+		case "server":
+			smtpserver.Trace = true
+		case "client":
+			smtpclient.Trace = true
+		default:
+			log.Printf("unknown component: %s", comp)
+		}
+	}
 
 	// get the rules
 	forwardRules, err := rules.NewRules(forwards)
@@ -76,7 +116,7 @@ func main() {
 	defer listen.Close()
 
 	// create the processor
-	msgProcessor, err := process.NewProcessor(servername, forwardRules, debug)
+	msgProcessor, err := process.NewProcessor(servername, forwardRules)
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -88,6 +128,6 @@ func main() {
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		go smtpserver.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, debug)
+		go smtpserver.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile)
 	}
 }

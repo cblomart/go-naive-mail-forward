@@ -29,15 +29,13 @@ type Process struct {
 	poolLock sync.RWMutex
 	rules    *rules.Rules
 	Hostname string
-	Debug    bool
 }
 
-func NewProcessor(hostname string, processRules *rules.Rules, debug bool) (*Process, error) {
+func NewProcessor(hostname string, processRules *rules.Rules) (*Process, error) {
 	process := &Process{
 		smtpPool: []smtpclient.SmtpClient{},
 		poolLock: sync.RWMutex{},
 		rules:    processRules,
-		Debug:    debug,
 		Hostname: hostname,
 	}
 	// start pool management
@@ -77,7 +75,7 @@ func (p *Process) checkPools() {
 	// clean lingering connections that may have tripped
 	c2 := p.cleanPool()
 	// now we should be good
-	if c1 || c2 || p.Debug {
+	if c1 || c2 || Debug {
 		p.reportPool()
 	}
 }
@@ -91,14 +89,14 @@ func (p *Process) cleanPool() bool {
 	toRemove := []int{}
 	for i := range p.smtpPool {
 		if !p.smtpPool[i].Connected {
-			if p.Debug {
+			if Debug {
 				log.Printf("process - removing disconnected mx %s", p.smtpPool[i].Relay)
 			}
 			toRemove = append(toRemove, i)
 			continue
 		}
 		if p.smtpPool[i].LastSent.Before(minLastSent) {
-			if p.Debug {
+			if Debug {
 				log.Printf("process - removing timedout mx %s (%s)", p.smtpPool[i].Relay, time.Now().Sub(p.smtpPool[i].LastSent).String())
 			}
 			toRemove = append(toRemove, i)
@@ -131,7 +129,7 @@ func (p *Process) reportPool() {
 	p.poolLock.RLock()
 	defer p.poolLock.RUnlock()
 	if len(p.smtpPool) == 0 {
-		if p.Debug {
+		if Debug {
 			log.Printf("process - no smtp connection")
 		}
 		return
@@ -157,7 +155,7 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		log.Printf("process - %s: message has no destination", msg.Id)
 		return "", true, fmt.Errorf("no recipients")
 	}
-	if p.Debug {
+	if Debug {
 		log.Printf("process - %s: mapping smtp relays to send to", msg.Id)
 	}
 	// lock the pool
@@ -166,7 +164,7 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 	// get targeted domains
 	domains := msg.Domains()
 	// status on connections
-	if p.Debug {
+	if Debug {
 		log.Printf("process - mx statuses")
 		for i := range p.smtpPool {
 			state := "disconnected"
@@ -201,7 +199,7 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		}
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(matchedDomains)))
-	if p.Debug {
+	if Debug {
 		log.Printf("process - %s: domains: %s", msg.Id, strings.Join(domains, ", "))
 		log.Printf("process - %s: matched domains index: %v", msg.Id, matchedDomains)
 	}
@@ -248,7 +246,6 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 			client := &smtpclient.SmtpClient{
 				Relay:    mx.Host,
 				Domains:  []string{domain},
-				Debug:    p.Debug,
 				Hostname: p.Hostname,
 				LastSent: time.Now(),
 			}
@@ -310,7 +307,7 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		}
 	}
 	// status on connections
-	if p.Debug {
+	if Debug {
 		log.Printf("process - mx statuses")
 		for i := range p.smtpPool {
 			state := "disconnected"
