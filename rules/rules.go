@@ -13,6 +13,8 @@ import (
 
 type Rules []Rule
 
+var Debug = false
+
 func NewRules(rules string) (*Rules, error) {
 	if len(rules) == 0 {
 		return nil, fmt.Errorf("no rules")
@@ -98,8 +100,14 @@ func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 		return nil
 	}
 	// check match with inverstion
+	if Debug {
+		log.Printf("rules - matching %s against %s", ma.User, r.FromUser.String())
+	}
 	match := r.FromUser.MatchString(ma.User)
-	if match != r.Invert {
+	if Debug {
+		log.Printf("rules - %s matched against %s", ma.User, r.FromUser.String())
+	}
+	if match != !r.Invert {
 		return nil
 	}
 	for i := range toAddr {
