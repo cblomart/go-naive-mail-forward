@@ -235,8 +235,11 @@ func (conn *Conn) checkdnsbl() bool {
 		return false
 	}
 	prefix := ""
-	tmp := tcpaddr.String()
+	tmp := tcpaddr.IP.String()
 	if strings.Index(tmp, ":") >= 0 {
+		if conn.Debug {
+			log.Printf("server - %s: black list ipv6 (contains ':'): %s", conn.showClient(), tmp)
+		}
 		var sb strings.Builder
 		/*
 			i	p6 := ExpandIp6(tmp)
@@ -254,6 +257,9 @@ func (conn *Conn) checkdnsbl() bool {
 		prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
 	}
 	if len(prefix) == 0 {
+		if conn.Debug {
+			log.Printf("server - %s: black list prefix empty", conn.showClient())
+		}
 		return false
 	}
 	if conn.Debug {
