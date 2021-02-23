@@ -96,6 +96,9 @@ type Rule struct {
 func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 	toAddr := []address.MailAddress{}
 	copy(toAddr, r.To)
+	if Debug {
+		log.Printf("rules - original addresses %v", toAddr)
+	}
 	if strings.ToUpper(strings.TrimRight(ma.Domain, ".")) != strings.ToUpper(strings.TrimRight(r.Domain, ".")) {
 		return nil
 	}
@@ -107,13 +110,22 @@ func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 	if Debug {
 		log.Printf("rules - %s matched against %s", ma.User, r.FromUser.String())
 	}
-	if match != !r.Invert {
+	if r.Invert {
+		match = !match
+	}
+	if !match {
 		return nil
+	}
+	if Debug {
+		log.Printf("rules - %s matched against %s (invert: %v)", ma.User, r.FromUser.String(), r.Invert)
 	}
 	for i := range toAddr {
 		if len(toAddr[i].User) == 0 {
 			toAddr[i].User = ma.User
 		}
+	}
+	if Debug {
+		log.Printf("rules - forwarding addresses %v", toAddr)
 	}
 	return toAddr
 }
