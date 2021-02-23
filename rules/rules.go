@@ -94,7 +94,7 @@ type Rule struct {
 }
 
 func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
-	toAddr := []address.MailAddress{}
+	toAddr := make([]address.MailAddress, len(r.To))
 	copy(toAddr, r.To)
 	if Debug {
 		log.Printf("rules - original addresses %v", toAddr)
