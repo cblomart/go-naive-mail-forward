@@ -97,7 +97,7 @@ func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 	toAddr := []address.MailAddress{}
 	copy(toAddr, r.To)
 	if Debug {
-		log.Printf("rules - original addresses %v", toAddr)
+		log.Printf("rules - original addresses %v", r.To)
 	}
 	if strings.ToUpper(strings.TrimRight(ma.Domain, ".")) != strings.ToUpper(strings.TrimRight(r.Domain, ".")) {
 		return nil
@@ -107,8 +107,8 @@ func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 		log.Printf("rules - matching %s against %s", ma.User, r.FromUser.String())
 	}
 	match := r.FromUser.MatchString(ma.User)
-	if Debug {
-		log.Printf("rules - %s matched against %s", ma.User, r.FromUser.String())
+	if match && Debug {
+		log.Printf("rules - %s matched against '%s'", ma.User, r.FromUser.String())
 	}
 	if r.Invert {
 		match = !match
