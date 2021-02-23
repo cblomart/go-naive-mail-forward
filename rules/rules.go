@@ -85,19 +85,29 @@ func (rs *Rules) UpdateMessage(msg *message.Message) {
 }
 
 type Rule struct {
+	Invert   bool
 	FromUser *regexp.Regexp
 	To       []address.MailAddress
 	Domain   string
 }
 
 func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
+	toAddr := []address.MailAddress{}
+	copy(toAddr, r.To)
 	if strings.ToUpper(strings.TrimRight(ma.Domain, ".")) != strings.ToUpper(strings.TrimRight(r.Domain, ".")) {
 		return nil
 	}
-	if !r.FromUser.MatchString(ma.User) {
+	// check match with inverstion
+	match := r.FromUser.MatchString(ma.User)
+	if match != r.Invert {
 		return nil
 	}
-	return r.To
+	for i := range toAddr {
+		if len(toAddr[i].User) == 0 {
+			toAddr[i].User = ma.User
+		}
+	}
+	return toAddr
 }
 
 func NewRule(rule string) (*Rule, error) {
@@ -106,6 +116,10 @@ func NewRule(rule string) (*Rule, error) {
 		return nil, fmt.Errorf("rule needs at least two parts")
 	}
 	r := &Rule{}
+	if parts[0][0] == '!' {
+		r.Invert = true
+		parts[0] = parts[0][1:]
+	}
 	fromParts := strings.Split(parts[0], "@")
 	if len(fromParts) != 2 {
 		return nil, fmt.Errorf("too much or too little information in source")
@@ -120,12 +134,19 @@ func NewRule(rule string) (*Rule, error) {
 	r.FromUser = regexp.MustCompile(strings.Replace(fromParts[0], "*", "[0-9A-Za-z_]*", -1))
 	r.To = []address.MailAddress{}
 	for _, addr := range parts[1:] {
-		ma, err := address.NewMailAddress(addr)
-		if err != nil {
-			log.Printf("rules - invalid address: %s", addr)
-			continue
+		if strings.Index(addr, "@") >= 0 {
+			// full mail address
+			ma, err := address.NewMailAddress(addr)
+			if err != nil {
+				log.Printf("rules - invalid address: %s", addr)
+				continue
+			}
+			r.To = append(r.To, *ma)
+		} else {
+			if address.DomainMatch.MatchString(addr) {
+				r.To = append(r.To, address.MailAddress{Domain: addr})
+			}
 		}
-		r.To = append(r.To, *ma)
 	}
 	return r, nil
 }
