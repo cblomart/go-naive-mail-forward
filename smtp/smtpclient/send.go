@@ -16,9 +16,8 @@ import (
 )
 
 var (
-	Trace       = false
-	Debug       = false
-	TlsInsecure = true
+	Trace = false
+	Debug = false
 )
 
 type SmtpClient struct {
@@ -145,11 +144,10 @@ func (c *SmtpClient) StartTLS() error {
 	if Debug {
 		log.Printf("client - %s:%s: switching to tls", c.LocalPort, c.Relay)
 	}
-	// #nosec G402 ignore tls verification
 	tlsConn := tls.Client(
 		c.conn,
 		&tls.Config{
-			InsecureSkipVerify: TlsInsecure,
+			//InsecureSkipVerify: TlsInsecure,
 		},
 	)
 	if Debug {

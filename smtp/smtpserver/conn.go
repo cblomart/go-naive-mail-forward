@@ -23,9 +23,8 @@ import (
 )
 
 var (
-	Trace       = false
-	Debug       = false
-	TlsInsecure = true
+	Trace = false
+	Debug = false
 )
 
 //Conn is a smtp client connection
@@ -58,10 +57,8 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 	if err != nil {
 		log.Printf("server - error initializing tls config: %v", err)
 	} else {
-		// #nosec G402 ignore tls verification
 		tlsConfig = &tls.Config{
-			Certificates:       []tls.Certificate{certificate},
-			InsecureSkipVerify: TlsInsecure,
+			Certificates: []tls.Certificate{certificate},
 		}
 	}
 	return &Conn{
