@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+var (
+	Trace = false
+	Debug = false
+)
+
 type SmtpClient struct {
 	conn         net.Conn
 	LocalPort    string

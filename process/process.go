@@ -20,6 +20,10 @@ const (
 	connectionTimeout = 30
 )
 
+var (
+	Debug = false
+)
+
 type Process struct {
 	smtpPool []smtpclient.SmtpClient
 	poolLock sync.RWMutex

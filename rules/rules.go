@@ -13,7 +13,9 @@ import (
 
 type Rules []Rule
 
-var Debug = false
+var (
+	Debug = false
+)
 
 func NewRules(rules string) (*Rules, error) {
 	if len(rules) == 0 {

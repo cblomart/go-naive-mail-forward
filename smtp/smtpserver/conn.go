@@ -21,6 +21,11 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	Trace = false
+	Debug = false
+)
+
 //Conn is a smtp client connection
 type Conn struct {
 	conn       net.Conn
