@@ -237,19 +237,14 @@ func (conn *Conn) checkdnsbl() bool {
 	prefix := ""
 	tmp := tcpaddr.IP.String()
 	if strings.Index(tmp, ":") >= 0 {
-		if conn.Debug {
-			log.Printf("server - %s: black list ipv6 (contains ':'): %s", conn.showClient(), tmp)
-		}
 		var sb strings.Builder
-		/*
-			i	p6 := ExpandIp6(tmp)
-				for i := len(ip6) - 1; i >= 0; i-- {
-					sb.WriteByte(ip6[i])
-					if i > 0 {
-						sb.WriteRune('.')
-					}
-				}
-		*/
+		ip6 := ExpandIp6(tmp)
+		for i := len(ip6) - 1; i >= 0; i-- {
+			sb.WriteByte(ip6[i])
+			if i > 0 {
+				sb.WriteRune('.')
+			}
+		}
 		prefix = sb.String()
 
 	} else {
