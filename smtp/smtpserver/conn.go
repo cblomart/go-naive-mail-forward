@@ -236,33 +236,37 @@ func (conn *Conn) checkdnsbl() bool {
 	}
 	prefix := ""
 	tmp := tcpaddr.String()
-	ip6s := strings.Count(tmp, ":")
-	if ip6s >= 0 {
-		/*
-			cnt := 7 - ip6s
-			replace := strings.Repeat(":", cnt+2)
-			tmp = strings.ReplaceAll(tmp, "::", replace)
-			// ipv6
-			ip6parts := strings.Split(tmp, ":")
-			var sb strings.Builder
-			for i := range ip6parts {
-				for {
-					if len(ip6parts[i]) == 4 {
-						break
-					}
-					ip6parts[i] = "0" + ip6parts[i]
-				}
-				sb.WriteString(ip6parts[i])
+	if strings.Index(tmp, ":") >= 0 {
+		ip6s := 0
+		for _, c := range tmp {
+			if c == ':' {
+				ip6s++
 			}
-			ip6 := sb.String()
-			sb.Reset()
-			for i := len(ip6) - 1; i >= 0; i-- {
-				sb.WriteByte(ip6[i])
-				if i > 0 {
-					sb.WriteRune('.')
+		}
+		cnt := 7 - ip6s
+		replace := strings.Repeat(":", cnt+2)
+		tmp = strings.ReplaceAll(tmp, "::", replace)
+		// ipv6
+		ip6parts := strings.Split(tmp, ":")
+		var sb strings.Builder
+		for i := range ip6parts {
+			for {
+				if len(ip6parts[i]) == 4 {
+					break
 				}
+				ip6parts[i] = "0" + ip6parts[i]
 			}
-			prefix = sb.String()*/
+			sb.WriteString(ip6parts[i])
+		}
+		ip6 := sb.String()
+		sb.Reset()
+		for i := len(ip6) - 1; i >= 0; i-- {
+			sb.WriteByte(ip6[i])
+			if i > 0 {
+				sb.WriteRune('.')
+			}
+		}
+		prefix = sb.String()
 	} else {
 		// ipv4
 		prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
