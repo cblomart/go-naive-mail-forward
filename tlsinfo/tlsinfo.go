@@ -8,6 +8,7 @@ import (
 func TlsInfo(c *tls.Conn) string {
 	tlsVer := ""
 	switch c.ConnectionState().Version {
+	//lint:ignore SA1019 ssl reporting
 	case tls.VersionSSL30:
 		tlsVer = "sslv3"
 	case tls.VersionTLS10:

@@ -1,3 +1,4 @@
+//lint:file-ignore SA4006 something wrong with variable usage detection
 package smtpserver
 
 import (
