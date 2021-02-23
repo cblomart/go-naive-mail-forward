@@ -63,7 +63,7 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 	} else {
 		tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{certificate},
-			MinVersion:   TLSMinVer,
+			MinVersion:   tls.VersionTLS12,
 		}
 	}
 	return &Conn{
