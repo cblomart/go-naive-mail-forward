@@ -148,6 +148,7 @@ func (c *SmtpClient) StartTLS() error {
 	tlsConn := tls.Client(
 		c.conn,
 		&tls.Config{
+			// #nosec G402 ignore tls verification
 			InsecureSkipVerify: TlsInsecure,
 		},
 	)

@@ -59,7 +59,8 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 		log.Printf("server - error initializing tls config: %v", err)
 	} else {
 		tlsConfig = &tls.Config{
-			Certificates:       []tls.Certificate{certificate},
+			Certificates: []tls.Certificate{certificate},
+			// #nosec G402 ignore tls verification
 			InsecureSkipVerify: TlsInsecure,
 		}
 	}
