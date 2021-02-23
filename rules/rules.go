@@ -143,8 +143,11 @@ func NewRule(rule string) (*Rule, error) {
 			}
 			r.To = append(r.To, *ma)
 		} else {
+			// domain only
 			if address.DomainMatch.MatchString(addr) {
 				r.To = append(r.To, address.MailAddress{Domain: addr})
+			} else {
+				log.Printf("rules - invalid domain: %s", addr)
 			}
 		}
 	}
