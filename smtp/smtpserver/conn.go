@@ -519,6 +519,15 @@ func (conn *Conn) quit() error {
 	return conn.send(smtp.STATUSBYE, "goodbye")
 }
 
+func IsAsciiPrintable(text string) bool {
+	for _, c := range text {
+		if c < 32 && c > 126 {
+			return false
+		}
+	}
+	return true
+}
+
 func (conn *Conn) request() (string, string, error) {
 	// get a buffer reader
 	reader := bufio.NewReader(conn.conn)
@@ -531,6 +540,10 @@ func (conn *Conn) request() (string, string, error) {
 		}
 		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 		return "", "", fmt.Errorf("Cannot read")
+	}
+	if !IsAsciiPrintable(command) {
+		log.Printf("server - %s: command contains non ascii printable characters\n", conn.showClient())
+		return "", "", fmt.Errorf("command contains non ascii printable characters")
 	}
 	if conn.Debug {
 		log.Printf("server - %s < %s\n", conn.showClient(), command)
@@ -617,15 +630,13 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 		// replace lingering %
 		fullmechanism = strings.Replace(fullmechanism, "%%", "%", -1)
 		// now we have a clean mechanism
-		action := "+"
-		first := string(fullmechanism[0])
-		if first == "~" || first == "?" || first == "-" || first == "+" {
-			action = first
-			if first == "~" || first == "?" {
-				action = "+"
-			}
-		} else {
+		action := true // false for pass by default
+		first := fullmechanism[0]
+		if first != '~' && first != '?' && first != '-' && first != '+' {
 			fullmechanism = fmt.Sprintf("+%s", fullmechanism)
+		}
+		if first == '-' {
+			action = false
 		}
 		mechanism := fullmechanism[1:]
 		prefix := ""
@@ -645,7 +656,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 			if conn.Debug {
 				log.Printf("server - %s: hitting spf catchall for %s", conn.showClient(), domain)
 			}
-			return conn.evalAction(domain, action, fullmechanism), lookups
+			return conn.evalAction(action, domain, fullmechanism), lookups
 		case "ip6", "ip4":
 			if len(param) == 0 {
 				continue
@@ -653,7 +664,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 			if len(prefix) == 0 {
 				// ip match
 				if tcpaddr.IP.String() == param {
-					return conn.evalAction(domain, action, fullmechanism), lookups
+					return conn.evalAction(action, domain, fullmechanism), lookups
 				}
 			} else {
 				_, network, err := net.ParseCIDR(fmt.Sprintf("%s/%s", param, prefix))
@@ -662,7 +673,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 					continue
 				}
 				if network.Contains(tcpaddr.IP) {
-					return conn.evalAction(domain, action, fullmechanism), lookups
+					return conn.evalAction(action, domain, fullmechanism), lookups
 				}
 			}
 		case "a":
@@ -682,7 +693,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 			for _, ar := range ars {
 				if len(prefix) == 0 {
 					if ar.Equal(tcpaddr.IP) {
-						return conn.evalAction(domain, action, fullmechanism), lookups
+						return conn.evalAction(action, domain, fullmechanism), lookups
 					}
 				} else {
 					strnetwork := fmt.Sprintf("%s/%s", ar.String(), prefix)
@@ -691,7 +702,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 						continue
 					}
 					if network.Contains(tcpaddr.IP) {
-						return conn.evalAction(domain, action, fullmechanism), lookups
+						return conn.evalAction(action, domain, fullmechanism), lookups
 					}
 				}
 			}
@@ -722,7 +733,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 				for _, ar := range ars {
 					if len(prefix) == 0 {
 						if ar.Equal(tcpaddr.IP) {
-							return conn.evalAction(domain, action, fullmechanism), lookups
+							return conn.evalAction(action, domain, fullmechanism), lookups
 						}
 					} else {
 						strnetwork := fmt.Sprintf("%s/%s", ar.String(), prefix)
@@ -731,7 +742,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 							continue
 						}
 						if network.Contains(tcpaddr.IP) {
-							return conn.evalAction(domain, action, fullmechanism), lookups
+							return conn.evalAction(action, domain, fullmechanism), lookups
 						}
 					}
 				}
@@ -758,7 +769,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 				}
 				for _, ip := range ips {
 					if ip.Equal(tcpaddr.IP) {
-						return conn.evalAction(domain, action, fullmechanism), lookups
+						return conn.evalAction(action, domain, fullmechanism), lookups
 					}
 				}
 			}
@@ -776,7 +787,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 				continue
 			}
 			if len(ars) > 0 {
-				return conn.evalAction(domain, action, fullmechanism), lookups
+				return conn.evalAction(action, domain, fullmechanism), lookups
 			}
 		case "include":
 			if len(param) == 0 {
@@ -798,8 +809,8 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 	return true, lookups
 }
 
-func (conn *Conn) evalAction(domain, action, fullmechanism string) bool {
-	if action == "+" {
+func (conn *Conn) evalAction(action bool, domain, fullmechanism string) bool {
+	if action {
 		if conn.Debug {
 			log.Printf("server - %s: %s spf accept at '%s'", conn.showClient(), domain, fullmechanism)
 		}
