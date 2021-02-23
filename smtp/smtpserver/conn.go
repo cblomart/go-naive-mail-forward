@@ -237,29 +237,8 @@ func (conn *Conn) checkdnsbl() bool {
 	prefix := ""
 	tmp := tcpaddr.String()
 	if strings.Index(tmp, ":") >= 0 {
-		ip6s := 0
-		for _, c := range tmp {
-			if c == ':' {
-				ip6s++
-			}
-		}
-		cnt := 7 - ip6s
-		replace := strings.Repeat(":", cnt+2)
-		tmp = strings.ReplaceAll(tmp, "::", replace)
-		// ipv6
-		ip6parts := strings.Split(tmp, ":")
 		var sb strings.Builder
-		for i := range ip6parts {
-			for {
-				if len(ip6parts[i]) == 4 {
-					break
-				}
-				ip6parts[i] = "0" + ip6parts[i]
-			}
-			sb.WriteString(ip6parts[i])
-		}
-		ip6 := sb.String()
-		sb.Reset()
+		ip6 := ExpandIp6(tmp)
 		for i := len(ip6) - 1; i >= 0; i-- {
 			sb.WriteByte(ip6[i])
 			if i > 0 {
@@ -267,6 +246,7 @@ func (conn *Conn) checkdnsbl() bool {
 			}
 		}
 		prefix = sb.String()
+
 	} else {
 		// ipv4
 		prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
@@ -304,6 +284,31 @@ func (conn *Conn) checkdnsbl() bool {
 		}
 	}
 	return false
+}
+
+func ExpandIp6(shortip6 string) string {
+	ip6s := 0
+	for _, c := range shortip6 {
+		if c == ':' {
+			ip6s++
+		}
+	}
+	cnt := 7 - ip6s
+	replace := strings.Repeat(":", cnt+2)
+	shortip6 = strings.ReplaceAll(shortip6, "::", replace)
+	// ipv6
+	ip6parts := strings.Split(shortip6, ":")
+	var sb strings.Builder
+	for i := range ip6parts {
+		for {
+			if len(ip6parts[i]) == 4 {
+				break
+			}
+			ip6parts[i] = "0" + ip6parts[i]
+		}
+		sb.WriteString(ip6parts[i])
+	}
+	return sb.String()
 }
 
 func (conn *Conn) noop() error {
