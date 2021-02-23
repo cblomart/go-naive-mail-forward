@@ -1,5 +1,7 @@
 package main
 
+//go:generate git-version
+
 import (
 	"cblomart/go-naive-mail-forward/cert"
 	"cblomart/go-naive-mail-forward/process"
@@ -54,7 +56,7 @@ func init() {
 }
 
 func main() {
-	log.Print("Starting Golang Naive Mail Forwarder")
+	log.Printf("Starting Golang Naive Mail Forwarder (%s - %s - %s - %s)", gitTag, gitBranch, gitCommit, gitStatus)
 	flag.Parse()
 
 	// set debugging
