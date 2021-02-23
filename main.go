@@ -58,38 +58,42 @@ func main() {
 	flag.Parse()
 
 	// set debugging
-	if debug == "all" {
-		debug = "server,process,rule,client"
-	}
-	for _, comp := range strings.Split(debug, ",") {
-		log.Printf("enabling debugging for %s", comp)
-		switch comp {
-		case "server":
-			smtpserver.Debug = true
-		case "process":
-			process.Debug = true
-		case "rule":
-			rules.Debug = true
-		case "client":
-			smtpclient.Debug = true
-		default:
-			log.Printf("unknown component: %s", comp)
+	if len(debug) != 0 {
+		if debug == "all" {
+			debug = "server,process,rule,client"
+		}
+		for _, comp := range strings.Split(debug, ",") {
+			log.Printf("enabling debugging for %s", comp)
+			switch comp {
+			case "server":
+				smtpserver.Debug = true
+			case "process":
+				process.Debug = true
+			case "rule":
+				rules.Debug = true
+			case "client":
+				smtpclient.Debug = true
+			default:
+				log.Printf("unknown component: %s", comp)
+			}
 		}
 	}
 
 	// set tracing
-	if trace == "all" {
-		trace = "server,client"
-	}
-	for _, comp := range strings.Split(debug, ",") {
-		log.Printf("enabling tracing for %s", comp)
-		switch comp {
-		case "server":
-			smtpserver.Trace = true
-		case "client":
-			smtpclient.Trace = true
-		default:
-			log.Printf("unknown component: %s", comp)
+	if len(trace) != 0 {
+		if trace == "all" {
+			trace = "server,client"
+		}
+		for _, comp := range strings.Split(debug, ",") {
+			log.Printf("enabling tracing for %s", comp)
+			switch comp {
+			case "server":
+				smtpserver.Trace = true
+			case "client":
+				smtpclient.Trace = true
+			default:
+				log.Printf("unknown component: %s", comp)
+			}
 		}
 	}
 
