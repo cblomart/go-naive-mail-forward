@@ -12,12 +12,14 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 )
 
 const (
-	hostname = "smtp.zerottl.cc"
-	OK       = 220
+	envPrefix = "FORWARDER_"
+	hostname  = "smtp.zerottl.cc"
+	OK        = 220
 )
 
 var (
@@ -58,6 +60,8 @@ func init() {
 func main() {
 	log.Printf("Starting Golang Naive Mail Forwarder (%s - %s - %s - %s)", gitTag, gitBranch, gitCommit, gitStatus)
 	flag.Parse()
+	// check for environment variables
+	flag.VisitAll(checkenv)
 
 	// set debugging
 	if len(debug) != 0 {
@@ -136,4 +140,27 @@ func main() {
 		}
 		go smtpserver.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile)
 	}
+}
+
+func checkenv(fl *flag.Flag) {
+	// check only long args
+	if len(fl.Name) <= 1 {
+		return
+	}
+	name := strings.ToUpper(fl.Name)
+	value := ""
+	prefix := fmt.Sprintf("%s=", name)
+	for _, env := range os.Environ() {
+		if !strings.HasPrefix(env, prefix) {
+			continue
+		}
+		value = env[len(prefix):]
+		break
+	}
+	if len(value) == 0 {
+		log.Printf("environement variable %s set to empty value", name)
+		return
+	}
+	log.Printf("updating %s to %s from env", fl.Name, value)
+	fl.Value.Set(value)
 }
