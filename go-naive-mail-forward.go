@@ -4,9 +4,9 @@ package main
 
 import (
 	"cblomart/go-naive-mail-forward/cert"
+	"cblomart/go-naive-mail-forward/logging"
 	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/rules"
-	"cblomart/go-naive-mail-forward/smtp/smtpclient"
 	"cblomart/go-naive-mail-forward/smtp/smtpserver"
 	"flag"
 	"fmt"
@@ -64,44 +64,10 @@ func main() {
 	flag.VisitAll(checkenv)
 
 	// set debugging
-	if len(debug) != 0 {
-		if debug == "all" {
-			debug = "server,process,rule,client"
-		}
-		for _, comp := range strings.Split(debug, ",") {
-			log.Printf("enabling debugging for %s", comp)
-			switch comp {
-			case "server":
-				smtpserver.Debug = true
-			case "process":
-				process.Debug = true
-			case "rule":
-				rules.Debug = true
-			case "client":
-				smtpclient.Debug = true
-			default:
-				log.Printf("unknown component: %s", comp)
-			}
-		}
-	}
+	logging.SetDebug(debug)
 
 	// set tracing
-	if len(trace) != 0 {
-		if trace == "all" {
-			trace = "server,client"
-		}
-		for _, comp := range strings.Split(debug, ",") {
-			log.Printf("enabling tracing for %s", comp)
-			switch comp {
-			case "server":
-				smtpserver.Trace = true
-			case "client":
-				smtpclient.Trace = true
-			default:
-				log.Printf("unknown component: %s", comp)
-			}
-		}
-	}
+	logging.SetTrace(trace)
 
 	// get the rules
 	forwardRules, err := rules.NewRules(forwards)
@@ -147,18 +113,21 @@ func checkenv(fl *flag.Flag) {
 	if len(fl.Name) <= 1 {
 		return
 	}
-	name := strings.ToUpper(fl.Name)
 	value := ""
-	prefix := fmt.Sprintf("%s=", name)
+	prefix := strings.ToUpper(fmt.Sprintf("%s%s=", envPrefix, fl.Name))
+	found := false
 	for _, env := range os.Environ() {
 		if !strings.HasPrefix(env, prefix) {
 			continue
 		}
-		value = env[len(prefix):]
+		found = true
+		value = strings.TrimSpace(env[len(prefix):])
 		break
 	}
 	if len(value) == 0 {
-		log.Printf("environement variable %s set to empty value", name)
+		if found {
+			log.Printf("environement variable %s set to empty value", prefix)
+		}
 		return
 	}
 	log.Printf("updating %s to %s from env", fl.Name, value)

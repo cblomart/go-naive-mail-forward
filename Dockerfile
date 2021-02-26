@@ -32,8 +32,8 @@ FROM scratch
 
 # copy dist folder
 COPY --chown=0:0 --from=builder /dist /
-COPY --chown=65534:0 --from=builder /data /data
-USER 65534
+COPY --chown=0:0 --from=builder /data /data
+#USER 65534
 WORKDIR /data
 
-ENTRYPOINT ["/go-naive-mail-forwarder"]
+ENTRYPOINT ["/go-naive-mail-forward"]

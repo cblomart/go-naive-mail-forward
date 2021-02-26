@@ -29,7 +29,7 @@ func NewRules(rules string) (*Rules, error) {
 	for _, strRule := range parts {
 		rule, err := NewRule(strRule)
 		if err != nil {
-			log.Printf("rules - invalid rule %s", strRule)
+			log.Printf("rules - invalid rule %s: %s", strRule, err.Error())
 			continue
 		}
 		rs = append(rs, *rule)
@@ -147,7 +147,7 @@ func NewRule(rule string) (*Rule, error) {
 		return nil, fmt.Errorf("too much or too little information in source")
 	}
 	if !address.DomainMatch.MatchString(fromParts[1]) {
-		return nil, fmt.Errorf("invalid domain")
+		return nil, fmt.Errorf("invalid domain %s", fromParts[1])
 	}
 	r.Domain = fromParts[1]
 	if len(fromParts[0]) == 0 {

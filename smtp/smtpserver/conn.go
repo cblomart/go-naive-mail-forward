@@ -143,6 +143,12 @@ func (conn *Conn) ProcessMessages() {
 				return
 			}
 			err = conn.data()
+		case "DEBUG":
+			SetDebug(params)
+			err = conn.send(smtp.STATUSOK, GetDebug())
+		case "TRACE":
+			SetDebug(params)
+			err = conn.send(smtp.STATUSOK, GetTrace())
 		default:
 			err = conn.unknown(cmd)
 		}
@@ -209,11 +215,36 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 		log.Printf("server - %s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
+	// check that the name provided can be resolved
+	resolved := CheckPTR(hostname)
+	if !resolved {
+		// check mx records
+		mxs, err := net.LookupMX(hostname)
+		if err == nil {
+			for _, mx := range mxs {
+				// verify that the mx has a ptr
+				if CheckPTR(mx.Host) {
+					resolved = true
+					break
+				}
+			}
+		}
+	}
+	if !resolved {
+		log.Printf("server - %s: remote name not resolved: '%s'\n", conn.showClient(), hostname)
+		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+	}
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
 	// cehck balacklist
 	if !istls {
-		if conn.checkdnsbl() {
+		// check dns blacklist per ip
+		bad := conn.checkdnsbl(false)
+		if !bad {
+			// check dns blacklist per name
+			bad = conn.checkdnsbl(true)
+		}
+		if bad {
 			log.Printf("server - %s: known bad actor: '%s'\n", conn.showClient(), hostname)
 			return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 		}
@@ -229,7 +260,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
-func (conn *Conn) checkdnsbl() bool {
+func (conn *Conn) checkdnsbl(name bool) bool {
 	if Debug {
 		log.Printf("server - %s: dns black list check", conn.showClient())
 	}
@@ -239,9 +270,23 @@ func (conn *Conn) checkdnsbl() bool {
 		// should allways be called via TCP
 		return false
 	}
+	ipaddr := tcpaddr.IP
+	if name {
+		ips, err := net.LookupIP(conn.clientName)
+		if err != nil || len(ips) == 0 {
+			if Debug {
+				log.Printf("server - %s: could not resolve %s", conn.showClient(), conn.clientName)
+			}
+			return false
+		}
+		// TODO check more than the first ip
+		ipaddr = ips[0]
+	}
+	// calculate prefix to resolve
 	prefix := ""
-	tmp := tcpaddr.IP.String()
+	tmp := ipaddr.String()
 	if strings.Contains(tmp, ":") {
+		// ipv6
 		var sb strings.Builder
 		ip6 := ExpandIp6(tmp)
 		for i := len(ip6) - 1; i >= 0; i-- {
@@ -256,6 +301,7 @@ func (conn *Conn) checkdnsbl() bool {
 		// ipv4
 		prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
 	}
+	// prefix should be there
 	if len(prefix) == 0 {
 		if Debug {
 			log.Printf("server - %s: black list prefix empty", conn.showClient())
@@ -265,7 +311,7 @@ func (conn *Conn) checkdnsbl() bool {
 	if Debug {
 		log.Printf("server - %s: black list check prefix %s", conn.showClient(), prefix)
 	}
-	// check in //
+	// check in // for ip resolution result (true: found; false: not found)
 	var wg sync.WaitGroup
 	wg.Add(len(conn.dnsbl))
 	okChan := make(chan bool, len(conn.dnsbl))
@@ -276,12 +322,7 @@ func (conn *Conn) checkdnsbl() bool {
 			if Debug {
 				log.Printf("server - %s: dns black list looking for %s", conn.showClient(), tocheck)
 			}
-			ars, err := net.LookupIP(tocheck)
-			if err == nil && len(ars) > 0 {
-				okChan <- true
-				return
-			}
-			okChan <- false
+			okChan <- CheckPTR(tocheck)
 		}(bl)
 	}
 	wg.Wait()
@@ -292,6 +333,11 @@ func (conn *Conn) checkdnsbl() bool {
 		}
 	}
 	return false
+}
+
+func CheckPTR(host string) bool {
+	ars, err := net.LookupIP(host)
+	return err == nil && len(ars) > 0
 }
 
 func ExpandIp6(shortip6 string) string {
