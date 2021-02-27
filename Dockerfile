@@ -14,11 +14,15 @@ RUN go mod download
 COPY . .
 
 # code checks
-RUN staticcheck -f stylish  ./... \
-	&& gofmt -s -d . \
-	&& go vet ./... \
-	&& golint ./... \
-	&& gosec ./...
+RUN staticcheck  ./...;\
+	gofmt -s -d .;\
+	go vet ./...;\
+	gosec --quiet ./...;\
+    revive .;\
+    gocyclo -over 10 .;\
+    varcheck;\
+    structcheck;\
+    aligncheck
 
 # build the app
 RUN go generate ./... \
@@ -28,10 +32,6 @@ RUN go generate ./... \
 # prepare the distribution folder
 WORKDIR /dist
 RUN cp /build/go-naive-mail-forward ./go-naive-mail-forward
-
-# copy necessary distributed libraries
-#RUN ldd go-naive-mail-forward | tr -s '[:blank:]' '\n' | grep "^/" | xargs -I % sh -c 'mkdir -p $(dirname ./%); cp % ./%'
-#RUN mkdir -p lib64 && cp /lib64/ld-linux-x86-64.so.2 lib64/
 
 # create a folder from where to run
 RUN mkdir /data
