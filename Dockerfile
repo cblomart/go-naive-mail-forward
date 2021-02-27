@@ -14,15 +14,15 @@ RUN go mod download
 COPY . .
 
 # code checks
-RUN staticcheck  ./...;\
-	gofmt -s -d .;\
-	go vet ./...;\
-	gosec --quiet ./...;\
-    revive .;\
-    gocyclo -over 10 .;\
-    varcheck;\
-    structcheck;\
-    aligncheck
+RUN staticcheck  ./...
+RUN	gofmt -s -d .
+RUN	go vet ./...
+RUN	gosec --quiet ./...
+RUN revive .
+RUN gocyclo -over 10 .
+RUN varcheck
+RUN structcheck
+RUN aligncheck
 
 # build the app
 RUN go generate ./... \

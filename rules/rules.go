@@ -163,21 +163,29 @@ func NewRule(rule string) (*Rule, error) {
 	r.FromUser = regexp.MustCompile(regex)
 	r.To = []address.MailAddress{}
 	for _, addr := range parts[1:] {
-		if Debug {
-			log.Printf("rules - checking target %s", addr)
-		}
-		addrParts := strings.Split(addr, "@")
-		if len(addrParts) != 2 {
-			log.Printf("rules - invalid target address: %s", addr)
+		checked := CheckAddr(addr)
+		if checked == nil {
 			continue
 		}
-		user := addrParts[0]
-		domain := addrParts[1]
-		if !address.DomainMatch.MatchString(domain) {
-			log.Printf("rules - invalid target domain: %s", addr)
-			continue
-		}
-		r.To = append(r.To, address.MailAddress{Domain: domain, User: user})
+		r.To = append(r.To, *checked)
 	}
 	return r, nil
+}
+
+func CheckAddr(addr string) *address.MailAddress {
+	if Debug {
+		log.Printf("rules - checking target %s", addr)
+	}
+	addrParts := strings.Split(addr, "@")
+	if len(addrParts) != 2 {
+		log.Printf("rules - invalid target address: %s", addr)
+		return nil
+	}
+	user := addrParts[0]
+	domain := addrParts[1]
+	if !address.DomainMatch.MatchString(domain) {
+		log.Printf("rules - invalid target domain: %s", addr)
+		return nil
+	}
+	return &address.MailAddress{Domain: domain, User: user}
 }
