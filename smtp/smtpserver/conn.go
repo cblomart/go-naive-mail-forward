@@ -16,15 +16,20 @@ import (
 	"net/textproto"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+const (
+	Localhost   = "localhost"
+	Healthcheck = "healthcheck"
+)
+
 var (
-	Trace = false
-	Debug = false
+	Trace       = false
+	Debug       = false
+	DomainMatch = regexp.MustCompile(`^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$`)
 )
 
 //Conn is a smtp client connection
@@ -33,16 +38,14 @@ type Conn struct {
 	hello      bool
 	clientName string
 	ServerName string
-	Debug      bool
 	mailFrom   *address.MailAddress
 	rcptTo     []address.MailAddress
 	processor  *process.Process
 	domains    []string
 	tlsConfig  *tls.Config
 	dnsbl      []string
+	check      bool
 }
-
-var DomainMatch = regexp.MustCompile(`^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$`)
 
 func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string) {
 	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, dnsbl, keyfile, certfile)
@@ -94,7 +97,9 @@ func (conn *Conn) ProcessMessages() {
 	for {
 		cmd, params, err := conn.request()
 		if err != nil {
-			log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
+			if !(err.Error() == "connection dropped" && (!Debug || conn.check)) {
+				log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
+			}
 			break
 		}
 		if Debug {
@@ -114,7 +119,7 @@ func (conn *Conn) ProcessMessages() {
 		case "STARTTLS":
 			err = conn.starttls()
 		case "NOOP":
-			err = conn.noop()
+			err = conn.noop(params)
 		case "RSET":
 			if !conn.hello {
 				log.Printf("server - %s: reset without hello\n", conn.showClient())
@@ -147,7 +152,7 @@ func (conn *Conn) ProcessMessages() {
 			SetDebug(params)
 			err = conn.send(smtp.STATUSOK, GetDebug())
 		case "TRACE":
-			SetDebug(params)
+			SetTrace(params)
 			err = conn.send(smtp.STATUSOK, GetTrace())
 		default:
 			err = conn.unknown(cmd)
@@ -201,10 +206,8 @@ func (conn *Conn) unknown(command string) error {
 }
 
 func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
-	// user lowercased hostname
-	hostname = strings.ToLower(hostname)
 	// check proper domain name
-	if !DomainMatch.MatchString(hostname) {
+	if !DomainMatch.MatchString(hostname) && !strings.EqualFold(hostname, Localhost) {
 		// regex failed
 		log.Printf("server - %s: failed to verify: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
@@ -216,33 +219,32 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	// check that the name provided can be resolved
-	resolved := CheckPTR(hostname)
-	if !resolved {
-		// check mx records
-		mxs, err := net.LookupMX(hostname)
-		if err == nil {
-			for _, mx := range mxs {
-				// verify that the mx has a ptr
-				if CheckPTR(mx.Host) {
-					resolved = true
-					break
-				}
-			}
-		}
-	}
+	resolved := CheckA(hostname)
 	if !resolved {
 		log.Printf("server - %s: remote name not resolved: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+	}
+	// check that localhost connections comes from localhost
+	if strings.EqualFold(hostname, Localhost) {
+		tcpconn, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
+		if !ok {
+			log.Printf("server - %s: localhost connection not on tcp: '%s'\n", conn.showClient(), hostname)
+			return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+		}
+		if !tcpconn.IP.IsLoopback() {
+			log.Printf("server - %s: localhost connection not on loopback: '%s'\n", conn.showClient(), hostname)
+			return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+		}
 	}
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
 	// cehck balacklist
 	if !istls {
 		// check dns blacklist per ip
-		bad := conn.checkdnsbl(false)
+		bad := CheckRBLAddr(conn.conn.RemoteAddr(), conn.dnsbl)
 		if !bad {
 			// check dns blacklist per name
-			bad = conn.checkdnsbl(true)
+			bad = CheckRBLName(conn.clientName, conn.dnsbl)
 		}
 		if bad {
 			log.Printf("server - %s: known bad actor: '%s'\n", conn.showClient(), hostname)
@@ -260,113 +262,10 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
-func (conn *Conn) checkdnsbl(name bool) bool {
-	if Debug {
-		log.Printf("server - %s: dns black list check", conn.showClient())
+func (conn *Conn) noop(params string) error {
+	if strings.EqualFold(params, Healthcheck) {
+		conn.check = true
 	}
-	// determine what needs to be resolved
-	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
-	if !ok {
-		// should allways be called via TCP
-		return false
-	}
-	ipaddr := tcpaddr.IP
-	if name {
-		ips, err := net.LookupIP(conn.clientName)
-		if err != nil || len(ips) == 0 {
-			if Debug {
-				log.Printf("server - %s: could not resolve %s", conn.showClient(), conn.clientName)
-			}
-			return false
-		}
-		// TODO check more than the first ip
-		ipaddr = ips[0]
-	}
-	// calculate prefix to resolve
-	prefix := ""
-	tmp := ipaddr.String()
-	if strings.Contains(tmp, ":") {
-		// ipv6
-		var sb strings.Builder
-		ip6 := ExpandIp6(tmp)
-		for i := len(ip6) - 1; i >= 0; i-- {
-			sb.WriteByte(ip6[i])
-			if i > 0 {
-				sb.WriteRune('.')
-			}
-		}
-		prefix = sb.String()
-
-	} else {
-		// ipv4
-		prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
-	}
-	// prefix should be there
-	if len(prefix) == 0 {
-		if Debug {
-			log.Printf("server - %s: black list prefix empty", conn.showClient())
-		}
-		return false
-	}
-	if Debug {
-		log.Printf("server - %s: black list check prefix %s", conn.showClient(), prefix)
-	}
-	// check in // for ip resolution result (true: found; false: not found)
-	var wg sync.WaitGroup
-	wg.Add(len(conn.dnsbl))
-	okChan := make(chan bool, len(conn.dnsbl))
-	for _, bl := range conn.dnsbl {
-		go func(blacklist string) {
-			defer wg.Done()
-			tocheck := fmt.Sprintf("%s.%s", prefix, blacklist)
-			if Debug {
-				log.Printf("server - %s: dns black list looking for %s", conn.showClient(), tocheck)
-			}
-			okChan <- CheckPTR(tocheck)
-		}(bl)
-	}
-	wg.Wait()
-	close(okChan)
-	for v := range okChan {
-		if v {
-			return v
-		}
-	}
-	return false
-}
-
-func CheckPTR(host string) bool {
-	ars, err := net.LookupIP(host)
-	return err == nil && len(ars) > 0
-}
-
-func ExpandIp6(shortip6 string) string {
-	if strings.Contains(shortip6, "::") {
-		ip6s := 0
-		for _, c := range shortip6 {
-			if c == ':' {
-				ip6s++
-			}
-		}
-		cnt := 7 - ip6s
-		replace := strings.Repeat(":", cnt+2)
-		shortip6 = strings.ReplaceAll(shortip6, "::", replace)
-	}
-	ip6parts := strings.Split(shortip6, ":")
-	var sb strings.Builder
-	for i := range ip6parts {
-		for {
-			if len(ip6parts[i]) == 4 {
-				break
-			}
-			ip6parts[i] = "0" + ip6parts[i]
-		}
-		sb.WriteString(ip6parts[i])
-	}
-	return sb.String()
-}
-
-func (conn *Conn) noop() error {
 	return conn.send(smtp.STATUSOK, "ok")
 }
 
@@ -575,15 +474,6 @@ func (conn *Conn) quit() error {
 		log.Printf("server - %s: goodbye", conn.showClient())
 	}
 	return conn.send(smtp.STATUSBYE, "goodbye")
-}
-
-func IsAsciiPrintable(text string) bool {
-	for _, c := range text {
-		if c < 32 && c > 126 {
-			return false
-		}
-	}
-	return true
 }
 
 func (conn *Conn) request() (string, string, error) {
@@ -877,50 +767,4 @@ func (conn *Conn) evalAction(action bool, domain, fullmechanism string) bool {
 	// action should be deny then
 	log.Printf("server - %s: %s spf reject at '%s'", conn.showClient(), domain, fullmechanism)
 	return false
-}
-
-func Reverse(slice []string) []string {
-	if len(slice) <= 1 {
-		return slice
-	}
-	for i := 0; i < len(slice)/2; i++ {
-		tmp := slice[i]
-		slice[i] = slice[len(slice)-1-i]
-		slice[len(slice)-1-i] = tmp
-	}
-	return slice
-}
-
-func GetSPF(domain string, lookups int) (string, int) {
-	if lookups >= 10 {
-		return "", lookups
-	}
-	txts, err := net.LookupTXT(domain)
-	lookups++
-	if err != nil {
-		log.Printf("server - failed to get txt records for %s: %s", domain, err.Error())
-		return "", lookups
-	}
-	// get the first spf record found
-	spf := ""
-	for _, txt := range txts {
-		tmp := strings.ToLower(txt)
-		if strings.HasPrefix(tmp, "v=spf1 ") {
-			spf = txt[7:]
-			break
-		}
-	}
-	if len(spf) == 0 {
-		return spf, lookups
-	}
-	i := strings.Index(strings.ToLower(spf), "redirect=")
-	if i < 0 {
-		return spf, lookups
-	}
-	spf = spf[i+9:]
-	i = strings.Index(spf, " ")
-	if i > 0 {
-		spf = spf[:i]
-	}
-	return GetSPF(spf, lookups)
 }

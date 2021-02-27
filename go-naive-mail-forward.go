@@ -4,7 +4,6 @@ package main
 
 import (
 	"cblomart/go-naive-mail-forward/cert"
-	"cblomart/go-naive-mail-forward/logging"
 	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/rules"
 	"cblomart/go-naive-mail-forward/smtp/smtpserver"
@@ -34,6 +33,7 @@ var (
 	certfile   string
 	gencert    bool
 	dnsbl      string
+	check      bool
 )
 
 func init() {
@@ -55,6 +55,7 @@ func init() {
 	flag.StringVar(&keyfile, "key", "./smtp.key", "certificate key file (no password)")
 	flag.StringVar(&certfile, "cert", "./smtp.crt", "certificate file")
 	flag.BoolVar(&gencert, "gencert", true, "generate certificate")
+	flag.BoolVar(&check, "check", false, "checks the server status")
 }
 
 func main() {
@@ -63,11 +64,16 @@ func main() {
 	// check for environment variables
 	flag.VisitAll(checkenv)
 
+	// healthcheck
+	if check {
+		os.Exit(smtpserver.Check())
+	}
+
 	// set debugging
-	logging.SetDebug(debug)
+	smtpserver.SetDebug(debug)
 
 	// set tracing
-	logging.SetTrace(trace)
+	smtpserver.SetTrace(trace)
 
 	// get the rules
 	forwardRules, err := rules.NewRules(forwards)
@@ -130,6 +136,10 @@ func checkenv(fl *flag.Flag) {
 		}
 		return
 	}
-	log.Printf("updating %s to %s from env", fl.Name, value)
-	fl.Value.Set(value)
+	err := fl.Value.Set(value)
+	if err != nil {
+		log.Printf("could not update %s to %s from env: %s", fl.Name, value, err.Error())
+		return
+	}
+	log.Printf("updated %s to %s from env", fl.Name, value)
 }

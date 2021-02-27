@@ -18,18 +18,24 @@ func SetDebug(debug string) {
 			log.Printf("enabling debugging for %s", comp)
 			switch comp {
 			case "server":
-				Debug = true
+				Debug = !Debug
 			case "process":
-				process.Debug = true
+				process.Debug = !process.Debug
 			case "rule":
-				rules.Debug = true
+				rules.Debug = !rules.Debug
 			case "client":
-				smtpclient.Debug = true
+				smtpclient.Debug = !rules.Debug
 			default:
 				log.Printf("unknown component: %s", comp)
 			}
 		}
+	} else {
+		Debug = false
+		process.Debug = false
+		rules.Debug = false
+		smtpclient.Debug = false
 	}
+
 }
 
 func SetTrace(trace string) {
@@ -42,13 +48,16 @@ func SetTrace(trace string) {
 			log.Printf("enabling tracing for %s", comp)
 			switch comp {
 			case "server":
-				Trace = true
+				Trace = !Trace
 			case "client":
-				smtpclient.Trace = true
+				smtpclient.Trace = !smtpclient.Trace
 			default:
 				log.Printf("unknown component: %s", comp)
 			}
 		}
+	} else {
+		Trace = false
+		smtpclient.Trace = false
 	}
 }
 
