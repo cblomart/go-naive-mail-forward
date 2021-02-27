@@ -105,21 +105,11 @@ func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 		return nil
 	}
 	// check match with inverstion
-	if Debug {
-		log.Printf("rules - matching %s against %s", ma.User, r.FromUser.String())
-	}
-	match := r.FromUser.MatchString(ma.User)
-	if match && Debug {
-		log.Printf("rules - %s matched against '%s'", ma.User, r.FromUser.String())
-	}
-	if r.Invert {
-		match = !match
-	}
-	if !match {
+	if !r.Match(ma) {
+		if Debug {
+			log.Printf("rules -  %s didn't match %s", ma.User, r.FromUser.String())
+		}
 		return nil
-	}
-	if Debug {
-		log.Printf("rules - %s matched against %s (invert: %v)", ma.User, r.FromUser.String(), r.Invert)
 	}
 	for i := range toAddr {
 		if len(toAddr[i].User) == 0 {
@@ -130,6 +120,17 @@ func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 		log.Printf("rules - forwarding addresses %v", toAddr)
 	}
 	return toAddr
+}
+
+func (r *Rule) Match(addr address.MailAddress) bool {
+	match := r.FromUser.MatchString(addr.User)
+	if match && Debug {
+		log.Printf("rules - %s matched against '%s'", addr.User, r.FromUser.String())
+	}
+	if r.Invert {
+		match = !match
+	}
+	return match
 }
 
 func NewRule(rule string) (*Rule, error) {
