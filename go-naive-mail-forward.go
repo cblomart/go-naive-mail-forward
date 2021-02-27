@@ -17,7 +17,6 @@ import (
 
 const (
 	envPrefix = "FORWARDER_"
-	hostname  = "smtp.zerottl.cc"
 	OK        = 220
 )
 
