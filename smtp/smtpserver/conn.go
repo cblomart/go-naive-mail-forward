@@ -30,10 +30,12 @@ var (
 	Trace       = false
 	Debug       = false
 	DomainMatch = regexp.MustCompile(`^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$`)
+	clientId    = 0
 )
 
 //Conn is a smtp client connection
 type Conn struct {
+	id         int
 	conn       net.Conn
 	hello      bool
 	clientName string
@@ -65,7 +67,10 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 			MinVersion:   tls.VersionTLS12,
 		}
 	}
+	id := clientId + 1
+	clientId++
 	return &Conn{
+		id:         id,
 		conn:       conn,
 		hello:      false,
 		clientName: "",
@@ -80,12 +85,13 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 }
 
 func (conn *Conn) Close() error {
+	clientId--
 	return conn.conn.Close()
 }
 
 func (conn *Conn) ProcessMessages() {
 	if Debug {
-		log.Printf("server - %s: new connection\n", conn.showClient())
+		log.Printf("server - %s: new connection from %s\n", conn.showClient(), conn.conn.RemoteAddr().String())
 	}
 	// acknowlege the new comer
 	err := conn.ack()
@@ -165,16 +171,7 @@ func (conn *Conn) ProcessMessages() {
 }
 
 func (conn *Conn) showClient() string {
-	// get the port we are connected to
-	port := ""
-	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
-	if ok {
-		port = fmt.Sprintf(":%d", tcpaddr.Port)
-	}
-	if len(conn.clientName) == 0 {
-		return conn.conn.RemoteAddr().String()
-	}
-	return fmt.Sprintf("%s%s", conn.clientName, port)
+	return fmt.Sprintf("%04d", conn.id)
 }
 
 func (conn *Conn) send(status int, message string, extra ...string) error {
