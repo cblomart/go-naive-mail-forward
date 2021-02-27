@@ -212,7 +212,7 @@ func (conn *Conn) unknown(command string) error {
 
 func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	// check proper domain name
-	if !DomainMatch.MatchString(hostname) || !strings.EqualFold(hostname, Localhost) {
+	if !DomainMatch.MatchString(hostname) && !strings.EqualFold(hostname, Localhost) {
 		// regex failed
 		log.Printf("server - %s: failed to verify: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
