@@ -30,7 +30,7 @@ const (
 var (
 	Trace        = false
 	Debug        = false
-	DomainMatch  = regexp.MustCompile(`^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$`)
+	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
 	clientId     = 0
 	clientIdLock = sync.RWMutex{}
 )
