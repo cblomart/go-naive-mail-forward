@@ -59,7 +59,7 @@ func init() {
 }
 
 func main() {
-	log.Printf("Starting Golang Naive Mail Forwarder (%s - %s - %s - %s)", gitTag, gitBranch, gitCommit, gitStatus)
+	log.Printf("Starting Golang Naive Mail Forwarder (%s - %s - %s)", gitTag, gitBranch, gitShortCommit)
 	flag.Parse()
 	// check for environment variables
 	flag.VisitAll(checkenv)

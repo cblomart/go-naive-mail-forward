@@ -5,59 +5,64 @@ import (
 	"cblomart/go-naive-mail-forward/rules"
 	"cblomart/go-naive-mail-forward/smtp/smtpclient"
 	"log"
+	"regexp"
 	"strings"
 )
 
+var DebugParamMatch = regexp.MustCompile(`(?i)^((all|on|none|off|process|rule|client),?)+$`)
+
 func SetDebug(debug string) {
-	// set debugging
-	if len(debug) != 0 {
-		if debug == "all" {
-			debug = "server,process,rule,client"
+	if !DebugParamMatch.MatchString(debug) {
+		return
+	}
+	for _, comp := range strings.Split(debug, ",") {
+		log.Printf("switching debugging for %s", comp)
+		switch comp {
+		case "all", "on":
+			Debug = true
+			process.Debug = true
+			rules.Debug = true
+			smtpclient.Debug = true
+		case "server":
+			Debug = true
+		case "process":
+			process.Debug = true
+		case "rule":
+			rules.Debug = true
+		case "client":
+			smtpclient.Debug = true
+		case "none", "off":
+			Debug = false
+			process.Debug = false
+			rules.Debug = false
+			smtpclient.Debug = false
+		default:
+			log.Printf("unknown component: %s", comp)
 		}
-		for _, comp := range strings.Split(debug, ",") {
-			log.Printf("enabling debugging for %s", comp)
-			switch comp {
-			case "server":
-				Debug = !Debug
-			case "process":
-				process.Debug = !process.Debug
-			case "rule":
-				rules.Debug = !rules.Debug
-			case "client":
-				smtpclient.Debug = !rules.Debug
-			default:
-				log.Printf("unknown component: %s", comp)
-			}
-		}
-	} else {
-		Debug = false
-		process.Debug = false
-		rules.Debug = false
-		smtpclient.Debug = false
 	}
 
 }
 
 func SetTrace(trace string) {
-	// set tracing
-	if len(trace) != 0 {
-		if trace == "all" {
-			trace = "server,client"
+	if !DebugParamMatch.MatchString(trace) {
+		return
+	}
+	for _, comp := range strings.Split(trace, ",") {
+		log.Printf("enabling tracing for %s", comp)
+		switch comp {
+		case "all", "on":
+			Trace = true
+			smtpclient.Trace = true
+		case "server":
+			Trace = true
+		case "client":
+			smtpclient.Trace = true
+		case "none", "off":
+			Trace = false
+			smtpclient.Trace = false
+		default:
+			log.Printf("unknown component: %s", comp)
 		}
-		for _, comp := range strings.Split(trace, ",") {
-			log.Printf("enabling tracing for %s", comp)
-			switch comp {
-			case "server":
-				Trace = !Trace
-			case "client":
-				smtpclient.Trace = !smtpclient.Trace
-			default:
-				log.Printf("unknown component: %s", comp)
-			}
-		}
-	} else {
-		Trace = false
-		smtpclient.Trace = false
 	}
 }
 
