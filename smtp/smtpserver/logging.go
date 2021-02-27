@@ -11,11 +11,11 @@ import (
 
 var DebugParamMatch = regexp.MustCompile(`(?i)^((all|on|none|off|process|rule|client),?)+$`)
 
-func SetDebug(debug string) {
-	if !DebugParamMatch.MatchString(debug) {
+func SetDebug(list string) {
+	if !DebugParamMatch.MatchString(list) {
 		return
 	}
-	for _, comp := range strings.Split(debug, ",") {
+	for _, comp := range strings.Split(list, ",") {
 		log.Printf("switching debugging for %s", comp)
 		switch comp {
 		case "all", "on":
@@ -43,11 +43,11 @@ func SetDebug(debug string) {
 
 }
 
-func SetTrace(trace string) {
-	if !DebugParamMatch.MatchString(trace) {
+func SetTrace(list string) {
+	if !DebugParamMatch.MatchString(list) {
 		return
 	}
-	for _, comp := range strings.Split(trace, ",") {
+	for _, comp := range strings.Split(list, ",") {
 		log.Printf("enabling tracing for %s", comp)
 		switch comp {
 		case "all", "on":

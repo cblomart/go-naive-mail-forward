@@ -16,6 +16,7 @@ import (
 	"net/textproto"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,10 +28,11 @@ const (
 )
 
 var (
-	Trace       = false
-	Debug       = false
-	DomainMatch = regexp.MustCompile(`^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$`)
-	clientId    = 0
+	Trace        = false
+	Debug        = false
+	DomainMatch  = regexp.MustCompile(`^([a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\.?$`)
+	clientId     = 0
+	clientIdLock = sync.RWMutex{}
 )
 
 //Conn is a smtp client connection
@@ -67,6 +69,8 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 			MinVersion:   tls.VersionTLS12,
 		}
 	}
+	clientIdLock.Lock()
+	defer clientIdLock.Unlock()
 	id := clientId + 1
 	clientId++
 	return &Conn{
@@ -85,6 +89,8 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 }
 
 func (conn *Conn) Close() error {
+	clientIdLock.Lock()
+	defer clientIdLock.Unlock()
 	clientId--
 	return conn.conn.Close()
 }
@@ -171,6 +177,8 @@ func (conn *Conn) ProcessMessages() {
 }
 
 func (conn *Conn) showClient() string {
+	clientIdLock.RLock()
+	defer clientIdLock.RUnlock()
 	return fmt.Sprintf("%04d", conn.id)
 }
 
@@ -204,7 +212,7 @@ func (conn *Conn) unknown(command string) error {
 
 func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	// check proper domain name
-	if !DomainMatch.MatchString(hostname) && !strings.EqualFold(hostname, Localhost) {
+	if !DomainMatch.MatchString(hostname) || !strings.EqualFold(hostname, Localhost) {
 		// regex failed
 		log.Printf("server - %s: failed to verify: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
