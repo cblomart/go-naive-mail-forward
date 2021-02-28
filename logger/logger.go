@@ -91,6 +91,9 @@ func Logf(level string, facility string, format string, v ...interface{}) {
 }
 
 func SetDebug(list string) {
+	if len(list) == 0 {
+		return
+	}
 	debugLock.Lock()
 	defer debugLock.Unlock()
 	Infof("setting debugging for: %s", list)
@@ -138,6 +141,9 @@ func switchTraceFacilities(facilities []string) {
 }
 
 func SetTrace(list string) {
+	if len(list) == 0 {
+		return
+	}
 	traceLock.Lock()
 	defer traceLock.Unlock()
 	Infof("setting tracing for: %s", list)
