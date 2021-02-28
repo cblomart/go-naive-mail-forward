@@ -4,9 +4,10 @@ import (
 	"cblomart/go-naive-mail-forward/address"
 	"cblomart/go-naive-mail-forward/message"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
+
+	"log"
 
 	"github.com/google/uuid"
 )

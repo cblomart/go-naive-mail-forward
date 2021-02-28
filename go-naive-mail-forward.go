@@ -9,10 +9,11 @@ import (
 	"cblomart/go-naive-mail-forward/smtp/smtpserver"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"strings"
+
+	"log"
 )
 
 const (

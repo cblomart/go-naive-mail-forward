@@ -18,36 +18,18 @@ const (
 	VALIDYEARS = 3
 )
 
-func GenCert(host, keyfile, certfile string) error {
-	// check exisrtance of files
-	keyexists := true
-	_, err := os.Stat(keyfile)
+func FileExists(file string) (bool, error) {
+	_, err := os.Stat(file)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return fmt.Errorf("cannot stat %s: %v", keyfile, err)
-
+			return false, fmt.Errorf("cannot stat %s: %v", file, err)
 		}
-		keyexists = false
+		return false, nil
 	}
-	certexists := true
-	_, err = os.Stat(certfile)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("cannot stat %s: %v", certfile, err)
+	return true, nil
+}
 
-		}
-		certexists = false
-	}
-
-	if keyexists && certexists {
-		return nil
-	}
-	// generate RSA private key
-	priv, err := rsa.GenerateKey(rand.Reader, RSABITS)
-	if err != nil {
-		return fmt.Errorf("failed to generate private key: %v", err)
-	}
-
+func GenCertBytes(host string, priv *rsa.PrivateKey) ([]byte, error) {
 	// ECDSA, ED25519 and RSA subject keys should have the DigitalSignature
 	// KeyUsage bits set in the x509.Certificate template
 	keyUsage := x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
@@ -59,7 +41,7 @@ func GenCert(host, keyfile, certfile string) error {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		return fmt.Errorf("failed to generate serial number: %v", err)
+		return nil, fmt.Errorf("failed to generate serial number: %v", err)
 
 	}
 
@@ -86,33 +68,74 @@ func GenCert(host, keyfile, certfile string) error {
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
 	if err != nil {
-		return fmt.Errorf("failed to create certificate: %v", err)
+		return nil, fmt.Errorf("failed to create certificate: %v", err)
 	}
 
-	certOut, err := os.Create(certfile)
+	return derBytes, nil
+}
+
+func SaveFile(file string, header string, content []byte) error {
+	certOut, err := os.Create(file)
 	if err != nil {
-		return fmt.Errorf("failed to open %s for writing: %v", certfile, err)
+		return fmt.Errorf("failed to open %s for writing: %v", file, err)
 	}
-	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		return fmt.Errorf("failed to write data to %s: %v", certfile, err)
+	if err := pem.Encode(certOut, &pem.Block{Type: header, Bytes: content}); err != nil {
+		return fmt.Errorf("failed to write data to %s: %v", file, err)
 	}
 	if err := certOut.Close(); err != nil {
-		return fmt.Errorf("error closing %s: %v", certfile, err)
+		return fmt.Errorf("error closing %s: %v", file, err)
+	}
+	return nil
+}
+
+func GenCert(host, keyfile, certfile string) error {
+	// check if keyfile exists
+	keyexists, err := FileExists(keyfile)
+	if err != nil {
+		return err
 	}
 
-	keyOut, err := os.Create(keyfile)
+	// check if certfile exists
+	certexists, err := FileExists(keyfile)
 	if err != nil {
-		return fmt.Errorf("failed to open %s for writing: %v", keyfile, err)
+		return err
 	}
+
+	// files exists
+	if keyexists && certexists {
+		return nil
+	}
+
+	// generate RSA key pair
+	priv, err := rsa.GenerateKey(rand.Reader, RSABITS)
+	if err != nil {
+		return fmt.Errorf("failed to generate private key: %v", err)
+	}
+
+	// generate Private key bytes
 	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	if err != nil {
 		return fmt.Errorf("unable to marshal private key: %v", err)
 	}
-	if err := pem.Encode(keyOut, &pem.Block{Type: "PRIVATE KEY", Bytes: privBytes}); err != nil {
-		return fmt.Errorf("failed to write data to %s: %v", keyfile, err)
+
+	// generate Certificate bytes
+	derBytes, err := GenCertBytes(host, priv)
+	if err != nil {
+		return err
 	}
-	if err := keyOut.Close(); err != nil {
-		return fmt.Errorf("error closing %s: %v", keyfile, err)
+
+	// save certidicate
+	err = SaveFile(certfile, "CERTIFICATE", derBytes)
+	if err != nil {
+		return err
 	}
+
+	// save private key
+	err = SaveFile(keyfile, "PRIVATE KEY", privBytes)
+	if err != nil {
+		return err
+	}
+
+	// done
 	return nil
 }

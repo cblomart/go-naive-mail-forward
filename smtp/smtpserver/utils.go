@@ -2,11 +2,12 @@ package smtpserver
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"net/textproto"
 	"strings"
 	"sync"
+
+	"log"
 )
 
 func CheckA(host string) bool {

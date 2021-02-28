@@ -5,12 +5,13 @@ import (
 	"cblomart/go-naive-mail-forward/rules"
 	"cblomart/go-naive-mail-forward/smtp/smtpclient"
 	"fmt"
-	"log"
 	"net"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"log"
 
 	"github.com/google/uuid"
 )

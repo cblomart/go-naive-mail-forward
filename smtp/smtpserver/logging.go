@@ -4,9 +4,10 @@ import (
 	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/rules"
 	"cblomart/go-naive-mail-forward/smtp/smtpclient"
-	"log"
 	"regexp"
 	"strings"
+
+	"log"
 )
 
 var DebugParamMatch = regexp.MustCompile(`(?i)^((all|on|none|off|process|rule|client),?)+$`)

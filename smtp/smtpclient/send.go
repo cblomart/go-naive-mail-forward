@@ -7,12 +7,13 @@ import (
 	"cblomart/go-naive-mail-forward/tlsinfo"
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 	"net/textproto"
 	"strings"
 	"sync"
 	"time"
+
+	"log"
 )
 
 var (

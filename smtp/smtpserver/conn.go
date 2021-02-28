@@ -11,13 +11,14 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/textproto"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"log"
 
 	"github.com/google/uuid"
 )
@@ -211,50 +212,21 @@ func (conn *Conn) unknown(command string) error {
 }
 
 func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
-	// check proper domain name
-	if !DomainMatch.MatchString(hostname) && !strings.EqualFold(hostname, Localhost) {
-		// regex failed
-		log.Printf("server - %s: failed to verify: '%s'\n", conn.showClient(), hostname)
-		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
-	}
-	// check that this is not myself
-	if strings.EqualFold(strings.TrimRight(conn.ServerName, "."), strings.TrimRight(hostname, ".")) {
-		// greeted with my name... funny
-		log.Printf("server - %s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
-		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
-	}
-	// check that the name provided can be resolved
-	resolved := CheckA(hostname)
-	if !resolved {
-		log.Printf("server - %s: remote name not resolved: '%s'\n", conn.showClient(), hostname)
-		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+	err := conn.hostnameChecks(hostname)
+	if err != nil {
+		return true, err
 	}
 	// check that localhost connections comes from localhost
-	if strings.EqualFold(hostname, Localhost) {
-		tcpconn, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
-		if !ok {
-			log.Printf("server - %s: localhost connection not on tcp: '%s'\n", conn.showClient(), hostname)
-			return true, conn.send(smtp.STATUSNOACK, "cannot continue")
-		}
-		if !tcpconn.IP.IsLoopback() {
-			log.Printf("server - %s: localhost connection not on loopback: '%s'\n", conn.showClient(), hostname)
-			return true, conn.send(smtp.STATUSNOACK, "cannot continue")
-		}
+	if strings.EqualFold(hostname, Localhost) && !conn.ipIsLocal() {
+		log.Printf("server - %s: localhost but not local ip: '%s'\n", conn.showClient(), hostname)
+		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
 	// cehck balacklist
-	if !istls {
-		// check dns blacklist per ip
-		bad := CheckRBLAddr(conn.conn.RemoteAddr(), conn.dnsbl)
-		if !bad {
-			// check dns blacklist per name
-			bad = CheckRBLName(conn.clientName, conn.dnsbl)
-		}
-		if bad {
-			log.Printf("server - %s: known bad actor: '%s'\n", conn.showClient(), hostname)
-			return true, conn.send(smtp.STATUSNOACK, "cannot continue")
-		}
+	if !istls && conn.checkRBL() {
+		log.Printf("server - %s: known bad actor: '%s'\n", conn.showClient(), hostname)
+		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	conn.hello = true
 	conn.clientName = hostname
@@ -265,6 +237,51 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
+}
+
+func (conn *Conn) hostnameChecks(hostname string) error {
+	// check proper domain name
+	if !DomainMatch.MatchString(hostname) && !strings.EqualFold(hostname, Localhost) {
+		// regex failed
+		log.Printf("server - %s: failed to verify: '%s'\n", conn.showClient(), hostname)
+		return conn.send(smtp.STATUSNOACK, "cannot continue")
+	}
+	// check that this is not myself
+	if strings.EqualFold(strings.TrimRight(conn.ServerName, "."), strings.TrimRight(hostname, ".")) {
+		// greeted with my name... funny
+		log.Printf("server - %s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
+		return conn.send(smtp.STATUSNOACK, "cannot continue")
+	}
+	// check that the name provided can be resolved
+	resolved := CheckA(hostname)
+	if !resolved {
+		log.Printf("server - %s: remote name not resolved: '%s'\n", conn.showClient(), hostname)
+		return conn.send(smtp.STATUSNOACK, "cannot continue")
+	}
+	return nil
+}
+
+func (conn *Conn) ipIsLocal() bool {
+	tcpconn, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
+	if !ok {
+		log.Printf("server - %s: localhost connection not on tcp\n", conn.showClient())
+		return false
+	}
+	if !tcpconn.IP.IsLoopback() {
+		log.Printf("server - %s: localhost connection not on loopback\n", conn.showClient())
+		return false
+	}
+	return true
+}
+
+func (conn *Conn) checkRBL() bool {
+	// check dns blacklist per ip
+	bad := CheckRBLAddr(conn.conn.RemoteAddr(), conn.dnsbl)
+	if !bad {
+		// check dns blacklist per name
+		bad = CheckRBLName(conn.clientName, conn.dnsbl)
+	}
+	return bad
 }
 
 func (conn *Conn) noop(params string) error {
@@ -372,48 +389,30 @@ func (conn *Conn) rcptto(param string) error {
 	return conn.send(smtp.STATUSOK, "ok")
 }
 
-func (conn *Conn) data() error {
-	if Debug {
-		log.Printf("server - %s: recieveing data", conn.showClient())
-	}
-	// check if from and to ar there
-	if len(conn.rcptTo) == 0 || conn.mailFrom == nil {
-		// not ready to recieve a mail - i don't know where it goes!
-		log.Printf("server - %s: refusing data without 'from' and 'to'", conn.showClient())
-		return conn.send(smtp.STATUSBADSEC, "please tell me from/to before sending a message")
-	}
-	_, isTls := conn.conn.(*tls.Conn)
-	if !isTls {
-		log.Printf("server - %s: recieving message over clear text!", conn.showClient())
-	}
-	err := conn.send(smtp.STATUSACT, "shoot")
-	if err != nil {
-		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
-		return fmt.Errorf("cannot read")
-	}
-	// get a buffer reader
-	reader := bufio.NewReader(conn.conn)
-	// get a text proto reader
-	tp := textproto.NewReader(reader)
-	var sb strings.Builder
-	// get addresses of local and remote servers
+func (conn *Conn) getTrace() string {
+	// get information on the remove address
 	remoteaddr := conn.clientName
 	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
 	if ok {
 		remoteaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 	}
+
+	// get information on the remte address
 	localaddr := conn.ServerName
 	tcpaddr, ok = conn.conn.LocalAddr().(*net.TCPAddr)
 	if ok {
 		localaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 	}
+
+	// get information on TLS encryption
 	tlsinfos := ""
 	tlsConn, ok := conn.conn.(*tls.Conn)
 	if ok {
 		tlsinfos = fmt.Sprintf(" (%s)", tlsinfo.TlsInfo(tlsConn))
 	}
-	// prepare trace line
-	trace := fmt.Sprintf(
+
+	// return trace line
+	return fmt.Sprintf(
 		"Received: from %s by %s with Golang Naive Mail Forwarder%s id %s for %s; %s",
 		remoteaddr,
 		localaddr,
@@ -422,6 +421,42 @@ func (conn *Conn) data() error {
 		conn.mailFrom.String(),
 		time.Now().Format("02 Jan 06 15:04:05 MST"),
 	)
+}
+
+func (conn *Conn) data() error {
+	if Debug {
+		log.Printf("server - %s: recieveing data", conn.showClient())
+	}
+
+	// check if from and to ar there
+	if len(conn.rcptTo) == 0 || conn.mailFrom == nil {
+		// not ready to recieve a mail - i don't know where it goes!
+		log.Printf("server - %s: refusing data without 'from' and 'to'", conn.showClient())
+		return conn.send(smtp.STATUSBADSEC, "please tell me from/to before sending a message")
+	}
+
+	// warn if sending over clear text
+	_, isTls := conn.conn.(*tls.Conn)
+	if !isTls {
+		log.Printf("server - %s: recieving message over clear text!", conn.showClient())
+	}
+
+	// accept to recieve data
+	err := conn.send(smtp.STATUSACT, "shoot")
+	if err != nil {
+		log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
+		return fmt.Errorf("cannot read")
+	}
+
+	// get a buffer reader
+	reader := bufio.NewReader(conn.conn)
+
+	// get a text proto reader
+	tp := textproto.NewReader(reader)
+
+	var sb strings.Builder
+	// get trace information
+	trace := conn.getTrace()
 	if Debug {
 		log.Printf("server - %s: trace: %s", conn.showClient(), trace)
 	}
@@ -430,9 +465,6 @@ func (conn *Conn) data() error {
 	for {
 		line, err := tp.ReadLine()
 		if err != nil {
-			if err == io.EOF {
-				return fmt.Errorf("connection dropped")
-			}
 			log.Printf("server - %s: %s\n", conn.showClient(), err.Error())
 			return fmt.Errorf("cannot read")
 		}
