@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 
 	"log"
 )
@@ -19,7 +20,9 @@ const (
 )
 
 var DebugFacilities = map[string]bool{"all": false}
+var debugLock = sync.RWMutex{}
 var TraceFacilities = map[string]bool{"all": false}
+var traceLock = sync.RWMutex{}
 
 func getFacility() string {
 	_, file, _, ok := runtime.Caller(2)
@@ -39,11 +42,14 @@ func getFacility() string {
 
 func Debugf(format string, v ...interface{}) {
 	facility := getFacility()
+	debugLock.Lock()
+	defer debugLock.Unlock()
 	debug, ok := DebugFacilities[facility]
 	if !ok {
 		debug = DebugFacilities["all"]
 		DebugFacilities[facility] = debug
 	}
+
 	if ok && debug {
 		Logf(DEBUG, facility, fmt.Sprintf(format, v...))
 	}
@@ -51,7 +57,8 @@ func Debugf(format string, v ...interface{}) {
 
 func Tracef(format string, v ...interface{}) {
 	facility := getFacility()
-	//_, file, _, ok := runtime.Caller(1)
+	traceLock.Lock()
+	defer traceLock.Unlock()
 	trace, ok := TraceFacilities[facility]
 	if !ok {
 		trace = TraceFacilities["all"]
@@ -84,6 +91,8 @@ func Logf(level string, facility string, format string, v ...interface{}) {
 }
 
 func SetDebug(list string) {
+	debugLock.Lock()
+	defer debugLock.Unlock()
 	switch list {
 	case "none", "off":
 		DebugFacilities["all"] = false
@@ -123,6 +132,8 @@ func switchTraceFacilities(facilities []string) {
 }
 
 func SetTrace(list string) {
+	traceLock.Lock()
+	defer traceLock.Unlock()
 	switch list {
 	case "none", "off":
 		TraceFacilities["all"] = false
@@ -140,6 +151,8 @@ func SetTrace(list string) {
 }
 
 func GetDebug() string {
+	debugLock.RLock()
+	defer debugLock.RUnlock()
 	facilities := []string{}
 	for facility := range DebugFacilities {
 		if facility == "all" {
@@ -151,6 +164,8 @@ func GetDebug() string {
 }
 
 func GetTrace() string {
+	traceLock.RLock()
+	defer traceLock.RUnlock()
 	facilities := []string{}
 	for facility := range TraceFacilities {
 		if facility == "all" {
