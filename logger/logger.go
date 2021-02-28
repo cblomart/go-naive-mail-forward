@@ -80,7 +80,7 @@ func Fatalf(format string, v ...interface{}) {
 }
 
 func Logf(level string, facility string, format string, v ...interface{}) {
-	log.Printf("%s - %s - %s", level, facility, fmt.Sprintf(format, v...))
+	log.Printf("%s - %-7s - %s", level, facility, fmt.Sprintf(format, v...))
 }
 
 func SetDebug(list string) {
