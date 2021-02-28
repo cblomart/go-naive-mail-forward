@@ -41,7 +41,7 @@ func (c *SmtpClient) Connect() error {
 	// get local port
 	parts := strings.Split(conn.LocalAddr().String(), ":")
 	c.LocalPort = parts[len(parts)-1]
-	log.Debugf("client", "%s:%s: connected", c.LocalPort, c.Relay)
+	log.Debugf("%s:%s: connected", c.LocalPort, c.Relay)
 	c.conn = conn
 	// create the lock if empty as connection is established
 	if c.lock == nil {
@@ -64,7 +64,7 @@ func (c *SmtpClient) Connect() error {
 func (c *SmtpClient) Close() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	log.Infof("client", "disconnecting from %s", c.Relay)
+	log.Infof("disconnecting from %s", c.Relay)
 	if c.conn != nil {
 		c.Connected = false
 		// #nosec G104 ignore quit
@@ -85,7 +85,7 @@ func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) (bool, error) {
 }
 
 func (c *SmtpClient) sendCmd(command string) error {
-	log.Tracef("client", "%s:%s: > %s", c.LocalPort, c.Relay, command)
+	log.Tracef("%s:%s: > %s", c.LocalPort, c.Relay, command)
 	_, err := fmt.Fprintf(c.conn, "%s\r\n", command)
 	return err
 }
@@ -103,7 +103,7 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		log.Tracef("client", "%s:%s: < %s", c.LocalPort, c.Relay, line)
+		log.Tracef("%s:%s: < %s", c.LocalPort, c.Relay, line)
 		more, err := c.checkSmtpRespCode(code, line)
 		if err != nil {
 			return "", err
@@ -136,19 +136,19 @@ func (c *SmtpClient) StartTLS() error {
 		return err
 	}
 	// build the tls connection
-	log.Debugf("client", "%s:%s: switching to tls", c.LocalPort, c.Relay)
+	log.Debugf("%s:%s: switching to tls", c.LocalPort, c.Relay)
 	tlsConn := tls.Client(
 		c.conn,
 		&tls.Config{
 			MinVersion: tls.VersionTLS12,
 		},
 	)
-	log.Debugf("client", "%s:%s: tls handshake", c.LocalPort, c.Relay)
+	log.Debugf("%s:%s: tls handshake", c.LocalPort, c.Relay)
 	err = tlsConn.Handshake()
 	if err != nil {
 		return err
 	}
-	log.Debugf("client", "%s:%s: starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
+	log.Debugf("%s:%s: starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
 	c.conn = tlsConn
 	return nil
 }
@@ -226,7 +226,7 @@ func (c *SmtpClient) RcptTo(dest string) error {
 func (c *SmtpClient) Data(data string) error {
 	_, isTls := c.conn.(*tls.Conn)
 	if !isTls {
-		log.Warnf("client", "%s:%s: sending message over clear text", c.LocalPort, c.Relay)
+		log.Warnf("%s:%s: sending message over clear text", c.LocalPort, c.Relay)
 	}
 	err := c.sendCmd("DATA")
 	if err != nil {
@@ -242,13 +242,13 @@ func (c *SmtpClient) Data(data string) error {
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()
-		log.Tracef("client", "%s:%s: > %s", c.LocalPort, c.Relay, line)
+		log.Tracef("%s:%s: > %s", c.LocalPort, c.Relay, line)
 		_, err := fmt.Fprintf(c.conn, "%s\r\n", line)
 		if err != nil {
 			return err
 		}
 	}
-	log.Tracef("client", "%s:%s: > .", c.LocalPort, c.Relay)
+	log.Tracef("%s:%s: > .", c.LocalPort, c.Relay)
 	_, err = fmt.Fprint(c.conn, ".\r\n")
 	if err != nil {
 		return err
@@ -265,31 +265,31 @@ func (c *SmtpClient) Data(data string) error {
 func (c *SmtpClient) SendMessage(msg message.Message) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	log.Debugf("client", "%s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
+	log.Debugf("%s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
 	// sent mail from
 	err := c.MailFrom(msg.From.String())
 	if err != nil {
-		log.Errorf("client", "%s:%s:%s: %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+		log.Errorf("%s:%s:%s: %s", c.LocalPort, c.Relay, msg.Id, err.Error())
 		return err
 	}
 	// get recipients for domains
 	tos := msg.ToDomains(c.Domains)
 	if len(tos) == 0 {
-		log.Infof("client", "%s:%s:%s no recipient for the message in %s", c.LocalPort, c.Relay, msg.Id, strings.Join(c.Domains, ", "))
+		log.Infof("%s:%s:%s no recipient for the message in %s", c.LocalPort, c.Relay, msg.Id, strings.Join(c.Domains, ", "))
 		return fmt.Errorf("no recipients in domains")
 	}
 	// prepare relay for fqdn check
 	for _, to := range tos {
-		log.Debugf("client", "%s:%s:%s adding recipient %s", c.LocalPort, c.Relay, msg.Id, to)
+		log.Debugf("%s:%s:%s adding recipient %s", c.LocalPort, c.Relay, msg.Id, to)
 		err = c.RcptTo(to)
 		if err != nil {
-			log.Infof("client", "%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
 			continue
 		}
 	}
 	err = c.Data(msg.Data)
 	if err != nil {
-		log.Infof("client", "%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+		log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
 		return err
 	}
 	c.LastSent = time.Now()
@@ -327,7 +327,7 @@ func SendMessages(hostname string, domain string, msgs []message.Message, debug 
 	for _, msg := range msgs {
 		err := client.SendMessage(msg)
 		if err != nil {
-			log.Infof("client", "%s:%s:%s %s", client.LocalPort, client.Relay, msg.Id, err.Error())
+			log.Infof("%s:%s:%s %s", client.LocalPort, client.Relay, msg.Id, err.Error())
 			continue
 		}
 		// message sent :)

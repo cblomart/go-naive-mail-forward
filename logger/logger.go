@@ -37,8 +37,8 @@ func getFacility() string {
 	return lastfolder
 }
 
-func Debugf(facility string, format string, v ...interface{}) {
-	log.Printf(getFacility())
+func Debugf(format string, v ...interface{}) {
+	facility := getFacility()
 	debug, ok := DebugFacilities[facility]
 	if !ok {
 		debug = DebugFacilities["all"]
@@ -49,8 +49,8 @@ func Debugf(facility string, format string, v ...interface{}) {
 	}
 }
 
-func Tracef(facility string, format string, v ...interface{}) {
-	log.Printf(getFacility())
+func Tracef(format string, v ...interface{}) {
+	facility := getFacility()
 	//_, file, _, ok := runtime.Caller(1)
 	trace, ok := TraceFacilities[facility]
 	if !ok {
@@ -62,24 +62,20 @@ func Tracef(facility string, format string, v ...interface{}) {
 	}
 }
 
-func Infof(facility string, format string, v ...interface{}) {
-	log.Printf(getFacility())
-	Logf(INFO, facility, fmt.Sprintf(format, v...))
+func Infof(format string, v ...interface{}) {
+	Logf(INFO, getFacility(), fmt.Sprintf(format, v...))
 }
 
-func Errorf(facility string, format string, v ...interface{}) {
-	log.Printf(getFacility())
-	Logf(ERROR, facility, fmt.Sprintf(format, v...))
+func Errorf(format string, v ...interface{}) {
+	Logf(ERROR, getFacility(), fmt.Sprintf(format, v...))
 }
 
-func Warnf(facility string, format string, v ...interface{}) {
-	log.Printf(getFacility())
-	Logf(INFO, facility, fmt.Sprintf(format, v...))
+func Warnf(format string, v ...interface{}) {
+	Logf(INFO, getFacility(), fmt.Sprintf(format, v...))
 }
 
-func Fatalf(facility string, format string, v ...interface{}) {
-	log.Printf(getFacility())
-	Logf(INFO, facility, fmt.Sprintf(format, v...))
+func Fatalf(format string, v ...interface{}) {
+	Logf(INFO, getFacility(), fmt.Sprintf(format, v...))
 	os.Exit(1)
 }
 
