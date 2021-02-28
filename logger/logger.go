@@ -118,7 +118,6 @@ func switchDebugFacilities(facilities []string) {
 		if facility == "none" || facility == "off" || facility == "all" || facility == "on" {
 			continue
 		}
-		Infof("switching %s", facility)
 		if current, ok := DebugFacilities[facility]; ok {
 			DebugFacilities[facility] = !current
 		} else {
