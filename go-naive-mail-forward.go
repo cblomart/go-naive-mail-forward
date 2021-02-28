@@ -4,16 +4,16 @@ package main
 
 import (
 	"cblomart/go-naive-mail-forward/cert"
+	"cblomart/go-naive-mail-forward/healthcheck"
+	log "cblomart/go-naive-mail-forward/logger"
 	"cblomart/go-naive-mail-forward/process"
 	"cblomart/go-naive-mail-forward/rules"
-	"cblomart/go-naive-mail-forward/smtp/smtpserver"
+	"cblomart/go-naive-mail-forward/smtp/server"
 	"flag"
 	"fmt"
 	"net"
 	"os"
 	"strings"
-
-	log "github.com/cblomart/go-naive-mail-forward/logger"
 )
 
 const (
@@ -66,14 +66,14 @@ func main() {
 
 	// healthcheck
 	if check {
-		os.Exit(smtpserver.Check())
+		os.Exit(healthcheck.Check())
 	}
 
 	// set debugging
-	smtpserver.SetDebug(debug)
+	log.SetDebug(debug)
 
 	// set tracing
-	smtpserver.SetTrace(trace)
+	log.SetTrace(trace)
 
 	// get the rules
 	forwardRules, err := rules.NewRules(forwards)
@@ -87,13 +87,13 @@ func main() {
 	if gencert {
 		err := cert.GenCert(servername, keyfile, certfile)
 		if err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalf("main", err.Error())
 		}
 	}
 	// listen to port 25 (smtp)
 	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		log.Fatalln("main", err.Error())
+		log.Fatalf("main", err.Error())
 	}
 	defer listen.Close()
 
@@ -110,7 +110,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("main", err.Error())
 		}
-		go smtpserver.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile)
+		go server.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile)
 	}
 }
 

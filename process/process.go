@@ -3,7 +3,7 @@ package process
 import (
 	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/rules"
-	"cblomart/go-naive-mail-forward/smtp/smtpclient"
+	"cblomart/go-naive-mail-forward/smtp/client"
 	"fmt"
 	"net"
 	"sort"
@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/cblomart/go-naive-mail-forward/logger"
+	log "cblomart/go-naive-mail-forward/logger"
 
 	"github.com/google/uuid"
 )
@@ -22,7 +22,7 @@ const (
 )
 
 type Process struct {
-	smtpPool []smtpclient.SmtpClient
+	smtpPool []client.SmtpClient
 	poolLock sync.RWMutex
 	rules    *rules.Rules
 	Hostname string
@@ -30,7 +30,7 @@ type Process struct {
 
 func NewProcessor(hostname string, processRules *rules.Rules) (*Process, error) {
 	process := &Process{
-		smtpPool: []smtpclient.SmtpClient{},
+		smtpPool: []client.SmtpClient{},
 		poolLock: sync.RWMutex{},
 		rules:    processRules,
 		Hostname: hostname,
@@ -224,7 +224,7 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		added := false
 		for _, mx := range mxs {
 			// create smtp client
-			client := &smtpclient.SmtpClient{
+			client := &client.SmtpClient{
 				Relay:    mx.Host,
 				Domains:  []string{domain},
 				Hostname: p.Hostname,
@@ -303,7 +303,7 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 	return msg.Id, false, nil
 }
 
-func SendAsync(client smtpclient.SmtpClient, msg message.Message, wg *sync.WaitGroup, okChan chan bool) {
+func SendAsync(client client.SmtpClient, msg message.Message, wg *sync.WaitGroup, okChan chan bool) {
 	defer wg.Done()
 	err := client.SendMessage(msg)
 	if err != nil {

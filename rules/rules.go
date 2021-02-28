@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	log "github.com/cblomart/go-naive-mail-forward/logger"
+	log "cblomart/go-naive-mail-forward/logger"
 
 	"github.com/google/uuid"
 )
@@ -30,7 +30,7 @@ func NewRules(rules string) (*Rules, error) {
 	for _, strRule := range parts {
 		rule, err := NewRule(strRule)
 		if err != nil {
-			log.Printf("rules - invalid rule %s: %s", strRule, err.Error())
+			log.Infof("rules", "invalid rule %s: %s", strRule, err.Error())
 			continue
 		}
 		rs = append(rs, *rule)
@@ -86,7 +86,7 @@ func (rs *Rules) UpdateMessage(msg *message.Message) {
 		rcptTo[i] = to.String()
 	}
 	updated := strings.Join(rcptTo, ";")
-	log.Printf("rules - %s: forwarding: %s > %s", msg.Id, original, updated)
+	log.Infof("rules", "%s: forwarding: %s > %s", msg.Id, original, updated)
 }
 
 type Rule struct {
@@ -99,17 +99,13 @@ type Rule struct {
 func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 	toAddr := make([]address.MailAddress, len(r.To))
 	copy(toAddr, r.To)
-	if Debug {
-		log.Printf("rules - original addresses %v", toAddr)
-	}
+	log.Debugf("rules", "riginal addresses %v", toAddr)
 	if !strings.EqualFold(strings.TrimRight(ma.Domain, "."), strings.TrimRight(r.Domain, ".")) {
 		return nil
 	}
 	// check match with inverstion
 	if !r.Match(ma) {
-		if Debug {
-			log.Printf("rules -  %s didn't match %s", ma.User, r.FromUser.String())
-		}
+		log.Debugf("rules", "%s didn't match %s", ma.User, r.FromUser.String())
 		return nil
 	}
 	for i := range toAddr {
@@ -117,16 +113,14 @@ func (r *Rule) Evaluate(ma address.MailAddress) []address.MailAddress {
 			toAddr[i].User = ma.User
 		}
 	}
-	if Debug {
-		log.Printf("rules - forwarding addresses %v", toAddr)
-	}
+	log.Debugf("rules", "forwarding addresses %v", toAddr)
 	return toAddr
 }
 
 func (r *Rule) Match(addr address.MailAddress) bool {
 	match := r.FromUser.MatchString(addr.User)
-	if match && Debug {
-		log.Printf("rules - %s matched against '%s'", addr.User, r.FromUser.String())
+	if match {
+		log.Debugf("rules", "%s matched against '%s'", addr.User, r.FromUser.String())
 	}
 	if r.Invert {
 		match = !match
@@ -175,18 +169,16 @@ func NewRule(rule string) (*Rule, error) {
 }
 
 func CheckAddr(addr string) *address.MailAddress {
-	if Debug {
-		log.Printf("rules - checking target %s", addr)
-	}
+	log.Debugf("rules", "checking target %s", addr)
 	addrParts := strings.Split(addr, "@")
 	if len(addrParts) != 2 {
-		log.Printf("rules - invalid target address: %s", addr)
+		log.Infof("rules", "invalid target address: %s", addr)
 		return nil
 	}
 	user := addrParts[0]
 	domain := addrParts[1]
 	if !address.DomainMatch.MatchString(domain) {
-		log.Printf("rules - invalid target domain: %s", addr)
+		log.Infof("rules", "invalid target domain: %s", addr)
 		return nil
 	}
 	return &address.MailAddress{Domain: domain, User: user}

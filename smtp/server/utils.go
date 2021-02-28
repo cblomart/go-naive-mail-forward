@@ -1,4 +1,4 @@
-package smtpserver
+package server
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/cblomart/go-naive-mail-forward/logger"
+	log "cblomart/go-naive-mail-forward/logger"
 )
 
 func CheckA(host string) bool {
@@ -69,7 +69,7 @@ func GetSPF(domain string, lookups int) (string, int) {
 	txts, err := net.LookupTXT(domain)
 	lookups++
 	if err != nil {
-		log.Printf("server - failed to get txt records for %s: %s", domain, err.Error())
+		log.Infof("server", "failed to get txt records for %s: %s", domain, err.Error())
 		return "", lookups
 	}
 	// get the first spf record found
@@ -179,25 +179,25 @@ func ResolvAsync(host string, res *bool, wg *sync.WaitGroup) {
 func Check() int {
 	conn, err := textproto.Dial("tcp", fmt.Sprintf("%s:25", Localhost))
 	if err != nil {
-		log.Printf("check - error dialing %s: %s", fmt.Sprintf("%s:25", Localhost), err.Error())
+		log.Errorf("check", "error dialing %s: %s", fmt.Sprintf("%s:25", Localhost), err.Error())
 		return 1
 	}
 	defer conn.Close()
 	code, _, err := conn.ReadCodeLine(2)
 	if err != nil {
-		log.Printf("check - unexpected welcome response (%d): %s", code, err.Error())
+		log.Errorf("check", "unexpected welcome response (%d): %s", code, err.Error())
 		return 1
 	}
 	err = conn.Writer.PrintfLine("NOOP %s", Healthcheck)
 	if err != nil {
-		log.Printf("check - error sending noop: %s", err.Error())
+		log.Errorf("check", "error sending noop: %s", err.Error())
 		return 1
 	}
 	code, message, err := conn.ReadCodeLine(2)
 	if err != nil {
-		log.Printf("check - unexpected noop response (%d): %s", code, err.Error())
+		log.Errorf("check", "unexpected noop response (%d): %s", code, err.Error())
 		return 1
 	}
-	log.Printf("check - response: %s (%d)", message, code)
+	log.Infof("check", "response: %s (%d)", message, code)
 	return 0
 }
