@@ -1,10 +1,8 @@
 package server
 
 import (
-	"fmt"
 	"net"
 	"strings"
-	"sync"
 
 	log "cblomart/go-naive-mail-forward/logger"
 )
@@ -93,86 +91,4 @@ func GetSPF(domain string, lookups int) (string, int) {
 		spf = spf[:i]
 	}
 	return GetSPF(spf, lookups)
-}
-
-func CheckRBLName(host string, rbls []string) bool {
-	log.Debugf("check rbl on hostname %s", host)
-	if !DomainMatch.MatchString(host) {
-		// do not try to match on non hostname
-		return true
-	}
-	// prepare to call async
-	result := false
-	var wg sync.WaitGroup
-	// try to resolve ips
-	ips, err := net.LookupIP(host)
-	if err != nil || len(ips) == 0 {
-		// should be welcomed with a resolvable host
-		return true
-	}
-	wg.Add(len(ips))
-	for _, ip := range ips {
-		go CheckRBLIPAsync(ip, rbls, &result, &wg)
-	}
-	wg.Wait()
-	return result
-}
-
-func CheckRBLIPAsync(ip net.IP, rbls []string, res *bool, wg *sync.WaitGroup) {
-	defer wg.Done()
-	check := CheckRBLIP(ip, rbls)
-	if !*res && check {
-		*res = true
-	}
-}
-func CheckRBLAddr(addr net.Addr, rbls []string) bool {
-	tcp, ok := addr.(*net.TCPAddr)
-	if !ok {
-		return true
-	}
-	return CheckRBLIP(tcp.IP, rbls)
-}
-
-func CheckRBLIP(ip net.IP, rbls []string) bool {
-	log.Debugf("checking rbl on ip %s", ip.String())
-	// calculate prefix to resolve
-	prefix := ""
-	tmp := ip.String()
-	if strings.Contains(tmp, ":") {
-		// ipv6
-		var sb strings.Builder
-		ip6 := ExpandIp6(tmp)
-		for i := len(ip6) - 1; i >= 0; i-- {
-			sb.WriteByte(ip6[i])
-			if i > 0 {
-				sb.WriteRune('.')
-			}
-		}
-		prefix = sb.String()
-
-	} else {
-		// ipv4
-		prefix = strings.Join(Reverse(strings.Split(tmp, ".")), ".")
-	}
-	// prefix should be there
-	if len(prefix) == 0 {
-		return false
-	}
-	// check in // for ip resolution result (true: found; false: not found)
-	var wg sync.WaitGroup
-	wg.Add(len(rbls))
-	var result bool
-	for _, rbl := range rbls {
-		go ResolvAsync(fmt.Sprintf("%s.%s", prefix, rbl), &result, &wg)
-	}
-	wg.Wait()
-	return result
-}
-
-func ResolvAsync(host string, res *bool, wg *sync.WaitGroup) {
-	defer wg.Done()
-	check := CheckA(host)
-	if !*res && check {
-		*res = true
-	}
 }

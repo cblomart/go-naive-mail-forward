@@ -202,7 +202,7 @@ func (conn *Conn) helo(hostname string, extended bool) error {
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
 	// cehck balacklist
-	if !istls && conn.checkRBL() {
+	if !istls && conn.checkRBL(hostname) {
 		log.Warnf("%s: known bad actor: '%s'\n", conn.showClient(), hostname)
 		return conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
@@ -248,16 +248,6 @@ func (conn *Conn) ipIsLocal() bool {
 		return false
 	}
 	return true
-}
-
-func (conn *Conn) checkRBL() bool {
-	// check dns blacklist per ip
-	bad := CheckRBLAddr(conn.conn.RemoteAddr(), conn.dnsbl)
-	if !bad {
-		// check dns blacklist per name
-		bad = CheckRBLName(conn.clientName, conn.dnsbl)
-	}
-	return bad
 }
 
 func (conn *Conn) noop(params string) error {
