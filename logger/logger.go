@@ -115,8 +115,11 @@ func switchDebugFacilities(facilities []string) {
 		if facility == "none" || facility == "off" || facility == "all" || facility == "on" {
 			continue
 		}
+		Infof("switching %s", facility)
 		if current, ok := DebugFacilities[facility]; ok {
 			DebugFacilities[facility] = !current
+		} else {
+			DebugFacilities[facility] = true
 		}
 	}
 }
@@ -128,6 +131,8 @@ func switchTraceFacilities(facilities []string) {
 		}
 		if current, ok := TraceFacilities[facility]; ok {
 			TraceFacilities[facility] = !current
+		} else {
+			TraceFacilities[facility] = true
 		}
 	}
 }
@@ -156,11 +161,13 @@ func GetDebug() string {
 	debugLock.RLock()
 	defer debugLock.RUnlock()
 	facilities := []string{}
-	for facility := range DebugFacilities {
+	for facility, status := range DebugFacilities {
 		if facility == "all" {
 			continue
 		}
-		facilities = append(facilities, facility)
+		if status {
+			facilities = append(facilities, facility)
+		}
 	}
 	return strings.Join(facilities, ",")
 }
@@ -169,11 +176,13 @@ func GetTrace() string {
 	traceLock.RLock()
 	defer traceLock.RUnlock()
 	facilities := []string{}
-	for facility := range TraceFacilities {
+	for facility, status := range TraceFacilities {
 		if facility == "all" {
 			continue
 		}
-		facilities = append(facilities, facility)
+		if status {
+			facilities = append(facilities, facility)
+		}
 	}
 	return strings.Join(facilities, ",")
 }
