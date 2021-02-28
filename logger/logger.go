@@ -31,7 +31,7 @@ func getFacility() string {
 		return "main"
 	}
 	lastfolder := parts[len(parts)-2]
-	if lastfolder == "go-naive-mail-forward" {
+	if lastfolder == "go-naive-mail-forward" || lastfolder == "build" {
 		return "main"
 	}
 	return lastfolder
