@@ -35,7 +35,7 @@ var (
 	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
 	clientId     = 0
 	clientIdLock = sync.RWMutex{}
-	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "STARTTLS"}
+	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA"}
 )
 
 //Conn is a smtp client connection
