@@ -20,9 +20,9 @@ RUN	go vet ./...
 RUN	gosec --quiet ./...
 RUN revive .
 RUN gocyclo -over 10 .
-RUN varcheck
-RUN structcheck
-RUN aligncheck
+#RUN varcheck
+#RUN structcheck
+#RUN aligncheck
 
 # build the app
 RUN go generate ./... \

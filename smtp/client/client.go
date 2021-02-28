@@ -296,42 +296,32 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 	return nil
 }
 
-func SendMessages(hostname string, domain string, msgs []message.Message, debug bool) ([]string, error) {
-	// lookup first mx for domain
-	// mail exchangers must be known
-	mxs, err := net.LookupMX(domain)
-	if err != nil {
-		return nil, err
-	}
-	// create smtp client
-	client := &SmtpClient{
-		Relay:    mxs[0].Host,
-		Domains:  []string{domain},
-		Hostname: hostname,
-	}
+func (c *SmtpClient) StartSession() error {
 	// connect to server
-	err = client.Connect()
+	err := c.Connect()
 	if err != nil {
-		return nil, err
+		log.Infof("could not connect to mx %s", c.Hostname)
+		return err
 	}
-	// close connection on exit
-	defer client.Close()
-	// hello server
-	err = client.Helo()
+	// present ourselves
+	err = c.Helo()
 	if err != nil {
-		return nil, err
+		log.Infof("not welcomed by mx %s", c.Hostname)
+		return err
 	}
-	// loop over the messages
-	// recover ids of sent messages
-	ids := make([]string, 0)
-	for _, msg := range msgs {
-		err := client.SendMessage(msg)
+	// handle tls
+	if c.TlsSupported {
+		err = c.StartTLS()
 		if err != nil {
-			log.Infof("%s:%s:%s %s", client.LocalPort, client.Relay, msg.Id, err.Error())
-			continue
+			log.Infof("tls fail for mx %s", c.Hostname)
+			return err
 		}
-		// message sent :)
-		ids = append(ids, msg.Id)
+		// re hello
+		err = c.Helo()
+		if err != nil {
+			log.Infof("not welcomed by mx %s", c.Hostname)
+			return err
+		}
 	}
-	return ids, nil
+	return nil
 }
