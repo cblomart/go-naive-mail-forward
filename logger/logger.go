@@ -21,11 +21,24 @@ const (
 var DebugFacilities = map[string]bool{"all": false}
 var TraceFacilities = map[string]bool{"all": false}
 
-func Debugf(facility string, format string, v ...interface{}) {
-	_, file, _, ok := runtime.Caller(1)
-	if ok {
-		log.Print(file)
+func getFacility() string {
+	_, file, _, ok := runtime.Caller(2)
+	if !ok {
+		return "unknown"
 	}
+	parts := strings.Split(file, "/")
+	if len(parts) < 2 {
+		return "main"
+	}
+	lastfolder := parts[len(parts)-2]
+	if lastfolder == "go-naive-mail-forward" {
+		return "main"
+	}
+	return lastfolder
+}
+
+func Debugf(facility string, format string, v ...interface{}) {
+	log.Printf(getFacility())
 	debug, ok := DebugFacilities[facility]
 	if !ok {
 		debug = DebugFacilities["all"]
@@ -37,10 +50,7 @@ func Debugf(facility string, format string, v ...interface{}) {
 }
 
 func Tracef(facility string, format string, v ...interface{}) {
-	_, file, _, ok := runtime.Caller(1)
-	if ok {
-		log.Print(file)
-	}
+	log.Printf(getFacility())
 	//_, file, _, ok := runtime.Caller(1)
 	trace, ok := TraceFacilities[facility]
 	if !ok {
@@ -53,34 +63,22 @@ func Tracef(facility string, format string, v ...interface{}) {
 }
 
 func Infof(facility string, format string, v ...interface{}) {
-	_, file, _, ok := runtime.Caller(1)
-	if ok {
-		log.Print(file)
-	}
+	log.Printf(getFacility())
 	Logf(INFO, facility, fmt.Sprintf(format, v...))
 }
 
 func Errorf(facility string, format string, v ...interface{}) {
-	_, file, _, ok := runtime.Caller(1)
-	if ok {
-		log.Print(file)
-	}
+	log.Printf(getFacility())
 	Logf(ERROR, facility, fmt.Sprintf(format, v...))
 }
 
 func Warnf(facility string, format string, v ...interface{}) {
-	_, file, _, ok := runtime.Caller(1)
-	if ok {
-		log.Print(file)
-	}
+	log.Printf(getFacility())
 	Logf(INFO, facility, fmt.Sprintf(format, v...))
 }
 
 func Fatalf(facility string, format string, v ...interface{}) {
-	_, file, _, ok := runtime.Caller(1)
-	if ok {
-		log.Print(file)
-	}
+	log.Printf(getFacility())
 	Logf(INFO, facility, fmt.Sprintf(format, v...))
 	os.Exit(1)
 }
