@@ -486,11 +486,11 @@ func (conn *Conn) request() (string, string, error) {
 		log.Infof("%s: command contains non ascii printable characters\n", conn.showClient())
 		return "", "", fmt.Errorf("command contains non ascii printable characters")
 	}
-	if len(command) < 4 {
-		log.Infof("%s: command too small\n", conn.showClient())
-		return "", "", fmt.Errorf("command too small")
-	}
 	log.Tracef("%s < %s\n", conn.showClient(), command)
+	if len(command) < 4 {
+		log.Debugf("%s: command too small\n", conn.showClient())
+		return command, "", nil
+	}
 	sep := " "
 	base := strings.ToUpper(command[:4])
 	if base == "MAIL" || base == "RCPT" {
@@ -500,7 +500,7 @@ func (conn *Conn) request() (string, string, error) {
 	if i == -1 {
 		return strings.ToUpper(command), "", nil
 	}
-	params := command[i+1:]
-	command = strings.ToUpper(command[:i])
+	params := strings.TrimSpace(command[i+1:])
+	command = strings.ToUpper(strings.TrimSpace(command[:i]))
 	return command, params, nil
 }
