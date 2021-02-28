@@ -66,3 +66,12 @@ func (m *Message) Signed() bool {
 	}
 	return false
 }
+
+func (m *Message) Recipients() string {
+	// get destination addresses
+	addresses := make([]string, len(m.To))
+	for i, ma := range m.To {
+		addresses[i] = ma.String()
+	}
+	return strings.Join(addresses, ",")
+}

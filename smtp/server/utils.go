@@ -174,3 +174,12 @@ func ResolvAsync(host string, res *bool, wg *sync.WaitGroup) {
 		*res = true
 	}
 }
+
+func Contains(stack []string, needle string) bool {
+	for _, item := range stack {
+		if item == needle {
+			return true
+		}
+	}
+	return false
+}

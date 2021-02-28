@@ -34,6 +34,7 @@ var (
 	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
 	clientId     = 0
 	clientIdLock = sync.RWMutex{}
+	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "STARTTLS"}
 )
 
 //Conn is a smtp client connection
@@ -106,68 +107,53 @@ func (conn *Conn) ProcessMessages() {
 	}
 	// start the command response session
 	for {
+		// get command and params
 		cmd, params, err := conn.request()
 		if err != nil {
-			if !(err.Error() == "connection dropped" && conn.check) {
-				log.Infof("%s: %s\n", conn.showClient(), err.Error())
-			}
+			log.Debugf("%s: %s\n", conn.showClient(), err.Error())
 			break
 		}
-		switch cmd {
-		case "QUIT":
-			err = conn.quit()
-			return
-		case "HELO", "EHLO":
-			quit, nerr := conn.helo(params, cmd == "EHLO")
-			if nerr != nil || quit {
-				return
-			}
-			err = nerr
-		case "STARTTLS":
-			err = conn.starttls()
-		case "NOOP":
-			err = conn.noop(params)
-		case "RSET":
-			if !conn.hello {
-				log.Errorf("%s: reset without hello\n", conn.showClient())
-				err = conn.send(smtp.STATUSBADSEC, "no hello")
-				return
-			}
-			err = conn.rset()
-		case "MAIL FROM":
-			if !conn.hello {
-				log.Errorf("%s: recipient without hello\n", conn.showClient())
-				err = conn.send(smtp.STATUSBADSEC, "no hello")
-				return
-			}
-			err = conn.mailfrom(params)
-		case "RCPT TO":
-			if !conn.hello {
-				log.Errorf("%s: recipient without hello\n", conn.showClient())
-				err = conn.send(smtp.STATUSBADSEC, "no hello")
-				return
-			}
-			err = conn.rcptto(params)
-		case "DATA":
-			if !conn.hello {
-				log.Errorf("%s: recipient without hello\n", conn.showClient())
-				err = conn.send(smtp.STATUSBADSEC, "no hello")
-				return
-			}
-			err = conn.data()
-		case "DEBUG":
-			log.SetDebug(params)
-			err = conn.send(smtp.STATUSOK, log.GetDebug())
-		case "TRACE":
-			log.SetTrace(params)
-			err = conn.send(smtp.STATUSOK, log.GetTrace())
-		default:
-			err = conn.unknown(cmd)
+		if Contains(needHelo, cmd) {
+			log.Errorf("%s: no hello before '%s'\n", conn.showClient(), cmd)
+			err = conn.send(smtp.STATUSBADSEC, "no hello?")
+			break
 		}
+		err = conn.execCommand(cmd, params)
 		if err != nil {
 			log.Errorf("%s: %s\n", conn.showClient(), err.Error())
 			break
 		}
+	}
+}
+
+//gocyclo complains because of cases
+//gocyclo:ignore
+func (conn *Conn) execCommand(cmd, params string) error {
+	switch cmd {
+	case "QUIT":
+		return conn.quit()
+	case "HELO", "EHLO":
+		return conn.helo(params, cmd == "EHLO")
+	case "STARTTLS":
+		return conn.starttls()
+	case "NOOP":
+		return conn.noop(params)
+	case "RSET":
+		return conn.rset()
+	case "MAIL FROM":
+		return conn.mailfrom(params)
+	case "RCPT TO":
+		return conn.rcptto(params)
+	case "DATA":
+		return conn.data()
+	case "DEBUG":
+		log.SetDebug(params)
+		return conn.send(smtp.STATUSOK, log.GetDebug())
+	case "TRACE":
+		log.SetTrace(params)
+		return conn.send(smtp.STATUSOK, log.GetTrace())
+	default:
+		return conn.unknown(cmd)
 	}
 }
 
@@ -201,30 +187,30 @@ func (conn *Conn) unknown(command string) error {
 	return conn.send(smtp.STATUSERROR, "syntax error")
 }
 
-func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
+func (conn *Conn) helo(hostname string, extended bool) error {
 	err := conn.hostnameChecks(hostname)
 	if err != nil {
-		return true, err
+		return err
 	}
 	// check that localhost connections comes from localhost
 	if strings.EqualFold(hostname, Localhost) && !conn.ipIsLocal() {
 		log.Warnf("%s: localhost but not local ip: '%s'\n", conn.showClient(), hostname)
-		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+		return conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
 	// cehck balacklist
 	if !istls && conn.checkRBL() {
 		log.Warnf("%s: known bad actor: '%s'\n", conn.showClient(), hostname)
-		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
+		return conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	conn.hello = true
 	conn.clientName = hostname
 	log.Debugf("%s: welcoming name: '%s'\n", conn.showClient(), hostname)
 	if extended && conn.tlsConfig != nil && !istls {
-		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
+		return conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 	}
-	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
+	return conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
 func (conn *Conn) hostnameChecks(hostname string) error {
@@ -422,6 +408,38 @@ func (conn *Conn) data() error {
 		return fmt.Errorf("cannot read")
 	}
 
+	// read from input
+	data, err := conn.readdata()
+	if err != nil {
+		log.Infof("%s: %s\n", conn.showClient(), err.Error())
+	}
+
+	// save to storage
+	msg := message.Message{
+		Id:   uuid.NewString(),
+		From: conn.mailFrom,
+		To:   conn.rcptTo,
+		Data: data,
+	}
+	log.Infof("%s: message %s (%d bytes) to %v", conn.showClient(), msg.Id, len(data), msg.Recipients())
+	accept, _ := conn.spfCheck("", 0)
+	if !accept && !msg.Signed() {
+		log.Warnf("%s: message %s is not signed and refused by SPF checks", conn.showClient(), msg.Id)
+		return conn.send(smtp.STATUSERROR, "spf failed")
+	}
+	msgID, reject, err := conn.processor.Handle(msg)
+	if err != nil {
+		log.Errorf("%s:%s: error handling message: %s", conn.showClient(), msgID, err.Error())
+		if reject {
+			return conn.send(smtp.STATUSNOPOL, "mail rejected")
+		}
+		return conn.send(smtp.STATUSTMPER, "could not handle message")
+	}
+	log.Infof("%s: message %s recieved", conn.showClient(), msg.Id)
+	return conn.send(smtp.STATUSOK, "recieved 5/5")
+}
+
+func (conn *Conn) readdata() (string, error) {
 	// get a buffer reader
 	reader := bufio.NewReader(conn.conn)
 
@@ -438,7 +456,7 @@ func (conn *Conn) data() error {
 		line, err := tp.ReadLine()
 		if err != nil {
 			log.Infof("%s: %s\n", conn.showClient(), err.Error())
-			return fmt.Errorf("cannot read")
+			return "", fmt.Errorf("cannot read")
 		}
 		if Debug {
 			log.Infof("%s < %s\n", conn.showClient(), line)
@@ -449,33 +467,7 @@ func (conn *Conn) data() error {
 		sb.WriteString(line)
 		sb.WriteString("\r\n")
 	}
-	// save to storage
-	msg := message.Message{
-		Id:   uuid.NewString(),
-		From: conn.mailFrom,
-		To:   conn.rcptTo,
-		Data: sb.String(),
-	}
-	addresses := make([]string, len(msg.To))
-	for i, ma := range msg.To {
-		addresses[i] = ma.String()
-	}
-	log.Infof("%s: message %s (%d bytes) to %v", conn.showClient(), msg.Id, sb.Len(), strings.Join(addresses, ", "))
-	accept, _ := conn.spfCheck("", 0)
-	if !accept && !msg.Signed() {
-		log.Warnf("%s: message %s is not signed and refused by SPF checks", conn.showClient(), msg.Id)
-		return conn.send(smtp.STATUSERROR, "spf failed")
-	}
-	msgId, reject, err := conn.processor.Handle(msg)
-	if err != nil {
-		log.Errorf("%s:%s: error handling message: %s", conn.showClient(), msgId, err.Error())
-		if reject {
-			return conn.send(smtp.STATUSNOPOL, "mail rejected")
-		}
-		return conn.send(smtp.STATUSTMPER, "could not handle message")
-	}
-	log.Infof("%s: message %s recieved", conn.showClient(), msg.Id)
-	return conn.send(smtp.STATUSOK, "recieved 5/5")
+	return sb.String(), nil
 }
 
 func (conn *Conn) quit() error {
