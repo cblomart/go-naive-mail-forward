@@ -96,6 +96,7 @@ func GetSPF(domain string, lookups int) (string, int) {
 }
 
 func CheckRBLName(host string, rbls []string) bool {
+	log.Debugf("check rbl on hostname %s", host)
 	if !DomainMatch.MatchString(host) {
 		// do not try to match on non hostname
 		return true
@@ -133,6 +134,7 @@ func CheckRBLAddr(addr net.Addr, rbls []string) bool {
 }
 
 func CheckRBLIP(ip net.IP, rbls []string) bool {
+	log.Debugf("checking rbl on ip %s", ip.String())
 	// calculate prefix to resolve
 	prefix := ""
 	tmp := ip.String()
