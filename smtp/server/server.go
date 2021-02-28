@@ -35,7 +35,7 @@ var (
 	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
 	clientId     = 0
 	clientIdLock = sync.RWMutex{}
-	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA"}
+	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "STARTTLS"}
 )
 
 //Conn is a smtp client connection
@@ -115,7 +115,7 @@ func (conn *Conn) ProcessMessages() {
 			break
 		}
 		// check for commands that needs hello
-		if utils.ContainsString(needHelo, cmd) >= 0 {
+		if utils.ContainsString(needHelo, cmd) >= 0 && !conn.hello {
 			log.Errorf("%s: no hello before '%s'\n", conn.showClient(), cmd)
 			err = conn.send(smtp.STATUSBADSEC, "no hello?")
 			break
