@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"log"
+	log "github.com/cblomart/go-naive-mail-forward/logger"
 
 	"github.com/google/uuid"
 )
@@ -19,10 +19,6 @@ import (
 const (
 	keepaliveInterval = 4
 	connectionTimeout = 30
-)
-
-var (
-	Debug = false
 )
 
 type Process struct {
@@ -45,7 +41,7 @@ func NewProcessor(hostname string, processRules *rules.Rules) (*Process, error) 
 }
 
 func (p *Process) ManagePools() {
-	log.Printf("process - manage smtp connection pool (keepalive: %dm, nosendtimeout: %dm)", keepaliveInterval, connectionTimeout)
+	log.Infof("process", "manage smtp connection pool (keepalive: %dm, nosendtimeout: %dm)", keepaliveInterval, connectionTimeout)
 	// check every keepalive
 	ticker := time.NewTicker(keepaliveInterval * time.Minute)
 	quit := make(chan struct{})
@@ -70,7 +66,7 @@ func (p *Process) checkPools() {
 	// clean lingering connections that may have tripped
 	c2 := p.cleanPool()
 	// now we should be good
-	if c1 || c2 || Debug {
+	if c1 || c2 {
 		p.reportPool()
 	}
 }
@@ -84,16 +80,12 @@ func (p *Process) cleanPool() bool {
 	toRemove := []int{}
 	for i := range p.smtpPool {
 		if !p.smtpPool[i].Connected {
-			if Debug {
-				log.Printf("process - removing disconnected mx %s", p.smtpPool[i].Relay)
-			}
+			log.Debugf("process", "removing disconnected mx %s", p.smtpPool[i].Relay)
 			toRemove = append(toRemove, i)
 			continue
 		}
 		if p.smtpPool[i].LastSent.Before(minLastSent) {
-			if Debug {
-				log.Printf("process - removing timedout mx %s (%s)", p.smtpPool[i].Relay, time.Since(p.smtpPool[i].LastSent).String())
-			}
+			log.Debugf("process", "removing timedout mx %s (%s)", p.smtpPool[i].Relay, time.Since(p.smtpPool[i].LastSent).String())
 			toRemove = append(toRemove, i)
 		}
 	}
@@ -126,13 +118,11 @@ func (p *Process) reportPool() {
 	p.poolLock.RLock()
 	defer p.poolLock.RUnlock()
 	if len(p.smtpPool) == 0 {
-		if Debug {
-			log.Printf("process - no smtp connection")
-		}
+		log.Debugf("process", "no smtp connection")
 		return
 	}
 	for _, client := range p.smtpPool {
-		log.Printf("process - smtp connection (server/domains/lastsent): %s/%s/%s", client.Relay, strings.Join(client.Domains, ","), time.Since(client.LastSent).String())
+		log.Infof("process", "smtp connection (server/domains/lastsent): %s/%s/%s", client.Relay, strings.Join(client.Domains, ","), time.Since(client.LastSent).String())
 	}
 }
 
@@ -143,33 +133,29 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 	}
 	// check that message is signed
 	if !msg.Signed() {
-		log.Printf("process - %s: message is not signed!", msg.Id)
+		log.Warnf("process", "%s: message is not signed", msg.Id)
 	}
 	// update recipients following rules
 	p.rules.UpdateMessage(&msg)
 	// if destination doesn't go anywhere return an error
 	if len(msg.To) == 0 {
-		log.Printf("process - %s: message has no destination", msg.Id)
+		log.Infof("process", "%s: message has no destination", msg.Id)
 		return "", true, fmt.Errorf("no recipients")
 	}
-	if Debug {
-		log.Printf("process - %s: mapping smtp relays to send to", msg.Id)
-	}
+	log.Debugf("process", "%s: mapping smtp relays to send to", msg.Id)
 	// lock the pool
 	p.poolLock.Lock()
 	defer p.poolLock.Unlock()
 	// get targeted domains
 	domains := msg.Domains()
 	// status on connections
-	if Debug {
-		log.Printf("process - mx statuses")
-		for i := range p.smtpPool {
-			state := "disconnected"
-			if p.smtpPool[i].Connected {
-				state = "connected"
-			}
-			log.Printf("process - mx %s is %s", p.smtpPool[i].Relay, state)
+	log.Debugf("process", "mx statuses")
+	for i := range p.smtpPool {
+		state := "disconnected"
+		if p.smtpPool[i].Connected {
+			state = "connected"
 		}
+		log.Debugf("process", "mx %s is %s", p.smtpPool[i].Relay, state)
 	}
 	// list the pools to run the message to
 	targetSmtp := []int{}
@@ -196,10 +182,8 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		}
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(matchedDomains)))
-	if Debug {
-		log.Printf("process - %s: domains: %s", msg.Id, strings.Join(domains, ", "))
-		log.Printf("process - %s: matched domains index: %v", msg.Id, matchedDomains)
-	}
+	log.Debugf("process", "%s: domains: %s", msg.Id, strings.Join(domains, ", "))
+	log.Debugf("process", "%s: matched domains index: %v", msg.Id, matchedDomains)
 	// remove matched domains from list
 	for _, i := range matchedDomains {
 		domains[i] = domains[len(domains)-1]
@@ -210,7 +194,7 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		// mail exchangers for domain
 		mxs, err := net.LookupMX(domain)
 		if err != nil {
-			log.Printf("process - %s: could not find mx for %s", msg.Id, domain)
+			log.Infof("process", "%s: could not find mx for %s", msg.Id, domain)
 		}
 		// match mail exchanger against pool
 		targetFound := false
@@ -249,26 +233,26 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 			// connect to server
 			err = client.Connect()
 			if err != nil {
-				log.Printf("process - %s: could not connect to mx %s for %s", msg.Id, mx.Host, domain)
+				log.Infof("process", "%s: could not connect to mx %s for %s", msg.Id, mx.Host, domain)
 				continue
 			}
 			// present ourselves
 			err = client.Helo()
 			if err != nil {
-				log.Printf("process - %s: not welcomed by mx %s for %s", msg.Id, mx.Host, domain)
+				log.Infof("process", "%s: not welcomed by mx %s for %s", msg.Id, mx.Host, domain)
 				continue
 			}
 			// handle tls
 			if client.TlsSupported {
 				err = client.StartTLS()
 				if err != nil {
-					log.Printf("process - %s: tls fail at mx %s for %s", msg.Id, mx.Host, domain)
+					log.Infof("process", "%s: tls fail at mx %s for %s", msg.Id, mx.Host, domain)
 					continue
 				}
 				// re hello
 				err = client.Helo()
 				if err != nil {
-					log.Printf("process - %s: not welcomed by mx %s for %s", msg.Id, mx.Host, domain)
+					log.Infof("process", "%s: not welcomed by mx %s for %s", msg.Id, mx.Host, domain)
 					continue
 				}
 			}
@@ -276,11 +260,11 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 			p.smtpPool = append(p.smtpPool, *client)
 			targetSmtp = append(targetSmtp, len(p.smtpPool)-1)
 			added = true
-			log.Printf("process - %s: connected to mx %s for %s", msg.Id, mx.Host, domain)
+			log.Infof("process", "%s: connected to mx %s for %s", msg.Id, mx.Host, domain)
 			break
 		}
 		if !added {
-			log.Printf("process - %s: could not connect to any mx for %s", msg.Id, domain)
+			log.Infof("process", "%s: could not connect to any mx for %s", msg.Id, domain)
 		}
 	}
 	// create a waitgroup for client sends
@@ -304,15 +288,13 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		}
 	}
 	// status on connections
-	if Debug {
-		log.Printf("process - mx statuses")
-		for i := range p.smtpPool {
-			state := "disconnected"
-			if p.smtpPool[i].Connected {
-				state = "connected"
-			}
-			log.Printf("process - mx %s is %s", p.smtpPool[i].Relay, state)
+	log.Debugf("process", "mx statuses")
+	for i := range p.smtpPool {
+		state := "disconnected"
+		if p.smtpPool[i].Connected {
+			state = "connected"
 		}
+		log.Debugf("process", "mx %s is %s", p.smtpPool[i].Relay, state)
 	}
 	// return result
 	if !result {
@@ -325,10 +307,10 @@ func SendAsync(client smtpclient.SmtpClient, msg message.Message, wg *sync.WaitG
 	defer wg.Done()
 	err := client.SendMessage(msg)
 	if err != nil {
-		log.Printf("process - %s: could not send via %s: %s", msg.Id, client.Relay, err.Error())
+		log.Infof("process", "%s: could not send via %s: %s", msg.Id, client.Relay, err.Error())
 		okChan <- false
 		return
 	}
-	log.Printf("process - %s: sent via %s", msg.Id, client.Relay)
+	log.Infof("process", "%s: sent via %s", msg.Id, client.Relay)
 	okChan <- true
 }

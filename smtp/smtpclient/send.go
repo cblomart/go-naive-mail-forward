@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"log"
+	log "github.com/cblomart/go-naive-mail-forward/logger"
 )
 
 var (

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"log"
+	log "github.com/cblomart/go-naive-mail-forward/logger"
 )
 
 func CheckA(host string) bool {

@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"log"
+	log "github.com/cblomart/go-naive-mail-forward/logger"
 )
 
 var DebugParamMatch = regexp.MustCompile(`(?i)^((all|on|none|off|process|rule|client),?)+$`)

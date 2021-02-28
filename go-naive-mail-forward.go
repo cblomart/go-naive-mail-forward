@@ -13,7 +13,7 @@ import (
 	"os"
 	"strings"
 
-	"log"
+	log "github.com/cblomart/go-naive-mail-forward/logger"
 )
 
 const (
@@ -59,7 +59,7 @@ func init() {
 }
 
 func main() {
-	log.Printf("Starting Golang Naive Mail Forwarder (%s - %s - %s)", gitTag, gitBranch, gitShortCommit)
+	log.Infof("main", "Starting Golang Naive Mail Forwarder (%s - %s - %s)", gitTag, gitBranch, gitShortCommit)
 	flag.Parse()
 	// check for environment variables
 	flag.VisitAll(checkenv)
@@ -78,37 +78,37 @@ func main() {
 	// get the rules
 	forwardRules, err := rules.NewRules(forwards)
 	if err != nil {
-		log.Fatalln(err.Error())
+		log.Fatalf("main", err.Error())
 	}
 	domains := forwardRules.GetValidDomains()
-	log.Printf("accepting domains: %s", strings.Join(domains, ", "))
+	log.Infof("main", "accepting domains: %s", strings.Join(domains, ", "))
 
 	// generate certs
 	if gencert {
 		err := cert.GenCert(servername, keyfile, certfile)
 		if err != nil {
-			log.Fatalln(err.Error())
+			log.Fatalf(err.Error())
 		}
 	}
 	// listen to port 25 (smtp)
 	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		log.Fatalln(err.Error())
+		log.Fatalln("main", err.Error())
 	}
 	defer listen.Close()
 
 	// create the processor
 	msgProcessor, err := process.NewProcessor(servername, forwardRules)
 	if err != nil {
-		log.Fatalln(err.Error())
+		log.Fatalf("main", err.Error())
 	}
 
 	//handle connections
-	log.Printf("listening on %s:%d and waiting for connections\n", servername, port)
+	log.Infof("main", "listening on %s:%d and waiting for connections\n", servername, port)
 	for {
 		conn, err := listen.Accept()
 		if err != nil {
-			log.Fatalln(err.Error())
+			log.Fatalf("main", err.Error())
 		}
 		go smtpserver.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile)
 	}
@@ -132,14 +132,14 @@ func checkenv(fl *flag.Flag) {
 	}
 	if len(value) == 0 {
 		if found {
-			log.Printf("environement variable %s set to empty value", prefix)
+			log.Infof("main", "environement variable %s set to empty value", prefix)
 		}
 		return
 	}
 	err := fl.Value.Set(value)
 	if err != nil {
-		log.Printf("could not update %s to %s from env: %s", fl.Name, value, err.Error())
+		log.Infof("main", "could not update %s to %s from env: %s", fl.Name, value, err.Error())
 		return
 	}
-	log.Printf("updated %s to %s from env", fl.Name, value)
+	log.Infof("main", "updated %s to %s from env", fl.Name, value)
 }
