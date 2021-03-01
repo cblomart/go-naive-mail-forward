@@ -141,7 +141,7 @@ func (c *SmtpClient) StartTLS() error {
 		c.conn,
 		&tls.Config{
 			MinVersion: tls.VersionTLS12,
-			ServerName: c.Hostname,
+			ServerName: c.Relay,
 		},
 	)
 	log.Debugf("%s:%s: tls handshake", c.LocalPort, c.Relay)
