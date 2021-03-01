@@ -130,6 +130,7 @@ func (conn *Conn) ProcessMessages() {
 			break
 		}
 		quit, err := conn.execCommand(cmd, params)
+		log.Debugf("%s: recieved quit:%v err:%v", conn.showClient(), quit, err)
 		if err != nil {
 			log.Errorf("%s: %s\n", conn.showClient(), err.Error())
 		}
@@ -201,51 +202,53 @@ func (conn *Conn) unknown(command string) (bool, error) {
 }
 
 func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
-	err := conn.hostnameChecks(hostname)
-	if err != nil {
-		return true, err
+	log.Debugf("%s: checking hostname: %s", conn.showClient(), hostname)
+	if !conn.hostnameChecks(hostname) {
+		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
+	log.Debugf("%s: checking if legit localhost: %s", conn.showClient(), hostname)
 	// check that localhost connections comes from localhost
 	if strings.EqualFold(hostname, Localhost) && !conn.ipIsLocal() {
 		log.Warnf("%s: localhost but not local ip: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
-	// check if startls done
-	_, istls := conn.conn.(*tls.Conn)
-	// cehck balacklist
-	if !istls && conn.checkRBL(hostname) {
+	log.Debugf("%s: checking RBL: %s", conn.showClient(), hostname)
+	// check balacklist
+	if conn.checkRBL(hostname) {
 		log.Warnf("%s: known bad actor: '%s'\n", conn.showClient(), hostname)
 		return true, conn.send(smtp.STATUSNOACK, "cannot continue")
 	}
 	conn.hello = true
 	conn.clientName = hostname
 	log.Debugf("%s: welcoming name: '%s'\n", conn.showClient(), hostname)
+	// check if startls done
+	_, istls := conn.conn.(*tls.Conn)
 	if extended && conn.tlsConfig != nil && !istls {
 		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
 
-func (conn *Conn) hostnameChecks(hostname string) error {
+func (conn *Conn) hostnameChecks(hostname string) bool {
 	// check proper domain name
 	if !DomainMatch.MatchString(hostname) && !strings.EqualFold(hostname, Localhost) {
 		// regex failed
 		log.Warnf("%s: malformed domain: '%s'\n", conn.showClient(), hostname)
-		return conn.send(smtp.STATUSNOACK, "cannot continue")
+		return false
 	}
 	// check that this is not myself
 	if strings.EqualFold(strings.TrimRight(conn.ServerName, "."), strings.TrimRight(hostname, ".")) {
 		// greeted with my name... funny
 		log.Warnf("%s: greeting a doppleganger: '%s'\n", conn.showClient(), hostname)
-		return conn.send(smtp.STATUSNOACK, "cannot continue")
+		return false
 	}
 	// check that the name provided can be resolved
 	resolved := CheckA(hostname)
 	if !resolved {
 		log.Warnf("%s: remote name not resolved: '%s'\n", conn.showClient(), hostname)
-		return conn.send(smtp.STATUSNOACK, "cannot continue")
+		return false
 	}
-	return nil
+	return true
 }
 
 func (conn *Conn) ipIsLocal() bool {

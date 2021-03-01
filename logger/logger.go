@@ -78,11 +78,11 @@ func Errorf(format string, v ...interface{}) {
 }
 
 func Warnf(format string, v ...interface{}) {
-	Logf(INFO, getFacility(), fmt.Sprintf(format, v...))
+	Logf(WARN, getFacility(), fmt.Sprintf(format, v...))
 }
 
 func Fatalf(format string, v ...interface{}) {
-	Logf(INFO, getFacility(), fmt.Sprintf(format, v...))
+	Logf(FATAL, getFacility(), fmt.Sprintf(format, v...))
 	os.Exit(1)
 }
 
