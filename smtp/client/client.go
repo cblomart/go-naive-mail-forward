@@ -300,26 +300,26 @@ func (c *SmtpClient) StartSession() error {
 	// connect to server
 	err := c.Connect()
 	if err != nil {
-		log.Infof("could not connect to mx %s", c.Hostname)
+		log.Infof("could not connect to mx %s: %s", c.Relay, err.Error())
 		return err
 	}
 	// present ourselves
 	err = c.Helo()
 	if err != nil {
-		log.Infof("not welcomed by mx %s", c.Hostname)
+		log.Infof("not welcomed by mx %s: %s", c.Relay, err.Error())
 		return err
 	}
 	// handle tls
 	if c.TlsSupported {
 		err = c.StartTLS()
 		if err != nil {
-			log.Infof("tls fail for mx %s", c.Hostname)
+			log.Infof("tls fail for mx %s: %s", c.Relay, err.Error())
 			return err
 		}
 		// re hello
 		err = c.Helo()
 		if err != nil {
-			log.Infof("not welcomed by mx %s", c.Hostname)
+			log.Infof("not welcomed by mx %s: %s", c.Relay, err.Error())
 			return err
 		}
 	}
