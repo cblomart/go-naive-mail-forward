@@ -111,7 +111,12 @@ func (conn *Conn) ProcessMessages() {
 		// get command and params
 		cmd, params, err := conn.request()
 		if err != nil {
-			log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+			// log connection  drops as debug
+			if err.Error() != "connection dropped" {
+				log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+			} else {
+				log.Debugf("%s: %s\n", conn.showClient(), err.Error())
+			}
 			break
 		}
 		// check for commands that needs hello
