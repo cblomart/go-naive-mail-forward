@@ -149,7 +149,12 @@ func NewRule(rule string) (*Rule, error) {
 	if len(fromParts[0]) == 0 {
 		fromParts[0] = "*"
 	}
-	regex := strings.Replace(fromParts[0], "*", "[0-9A-Za-z_]*", -1)
+	// replace * wildcards
+	regex := strings.ReplaceAll(fromParts[0], "*", "[0-9A-Za-z_]*")
+	// replace ? wildcards
+	regex = strings.ReplaceAll(regex, "?", "[0-9A-Za-z_]")
+	// replace # wildcards
+	regex = strings.ReplaceAll(regex, "#", "[0-9]")
 	if regex[0] != '^' {
 		regex = fmt.Sprintf("^%s", regex)
 	}
