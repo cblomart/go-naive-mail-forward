@@ -14,6 +14,8 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"github.com/microsoft/ApplicationInsights-Go/appinsights"
 )
 
 const (
@@ -22,18 +24,19 @@ const (
 )
 
 var (
-	debug      string
-	trace      string
-	servername string
-	storage    string
-	port       int
-	forwards   string
-	interval   string
-	keyfile    string
-	certfile   string
-	gencert    bool
-	dnsbl      string
-	check      bool
+	debug              string
+	trace              string
+	servername         string
+	storage            string
+	port               int
+	forwards           string
+	interval           string
+	keyfile            string
+	certfile           string
+	gencert            bool
+	dnsbl              string
+	check              bool
+	instrumentationKey string
 )
 
 func init() {
@@ -56,6 +59,7 @@ func init() {
 	flag.StringVar(&certfile, "cert", "./smtp.crt", "certificate file")
 	flag.BoolVar(&gencert, "gencert", true, "generate certificate")
 	flag.BoolVar(&check, "check", false, "checks the server status")
+	flag.StringVar(&instrumentationKey, "instkey", "", "Azure application insight instrumentation key")
 }
 
 func main() {
@@ -74,6 +78,11 @@ func main() {
 
 	// set tracing
 	log.SetTrace(trace)
+
+	// initalise application insight if provided
+	if len(instrumentationKey) > 0 {
+		appinsights.NewTelemetryClient(instrumentationKey)
+	}
 
 	// get the rules
 	forwardRules, err := rules.NewRules(forwards)
