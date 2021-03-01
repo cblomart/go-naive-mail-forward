@@ -289,6 +289,10 @@ func (conn *Conn) starttls() (bool, error) {
 	log.Debugf("%s: switching to tls", conn.showClient())
 	// ready for TLS
 	err := conn.send(smtp.STATUSRDY, "ready to discuss privately")
+	if err != nil {
+		log.Infof("%s: could not respond to client %s", conn.showClient(), err.Error())
+		return true, err
+	}
 	tlsConn = tls.Server(conn.conn, conn.tlsConfig)
 	log.Debugf("%s: tls handshake", conn.showClient())
 	err = tlsConn.Handshake()
