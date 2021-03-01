@@ -40,20 +40,19 @@ var (
 
 //Conn is a smtp client connection
 type Conn struct {
-	id          int
-	conn        net.Conn
-	hello       bool
-	clientName  string
-	ServerName  string
-	mailFrom    *address.MailAddress
-	rcptTo      []address.MailAddress
-	processor   *process.Process
-	domains     []string
-	tlsConfig   *tls.Config
-	dnsbl       []string
-	check       bool
-	insecuretls bool
-	nospf       bool
+	id         int
+	conn       net.Conn
+	hello      bool
+	clientName string
+	ServerName string
+	mailFrom   *address.MailAddress
+	rcptTo     []address.MailAddress
+	processor  *process.Process
+	domains    []string
+	tlsConfig  *tls.Config
+	dnsbl      []string
+	check      bool
+	nospf      bool
 }
 
 func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
@@ -69,10 +68,11 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 	if err != nil {
 		log.Infof("error initializing tls config: %v", err)
 	} else {
+		// #nosec G402 tls insecure configured by config
 		tlsConfig = &tls.Config{
 			Certificates:       []tls.Certificate{certificate},
 			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: insecuretls,
 		}
 	}
 	clientIdLock.Lock()
@@ -91,6 +91,7 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 		domains:    domains,
 		tlsConfig:  tlsConfig,
 		dnsbl:      strings.Split(dnsbl, ","),
+		nospf:      nospf,
 	}
 }
 
