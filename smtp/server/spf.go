@@ -13,6 +13,12 @@ import (
 var spfMechanismNeedParam = []string{"ip6", "ip4", "exists", "include"}
 
 func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
+	// skip spf check if needed
+	if conn.nospf {
+		log.Debugf("%s: spf check skipped per config", conn.showClient())
+		return true, lookups
+	}
+
 	// default to sender domain
 	if len(domain) == 0 {
 		domain = conn.mailFrom.Domain
@@ -21,6 +27,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 	// smtp should be contacted via TCP - get the IP
 	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
 	if !ok {
+		log.Errorf("%s: connection is not a TCP connection", conn.showClient())
 		return true, lookups
 	}
 	ip := tcpaddr.IP

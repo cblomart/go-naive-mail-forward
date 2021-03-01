@@ -40,27 +40,29 @@ var (
 
 //Conn is a smtp client connection
 type Conn struct {
-	id         int
-	conn       net.Conn
-	hello      bool
-	clientName string
-	ServerName string
-	mailFrom   *address.MailAddress
-	rcptTo     []address.MailAddress
-	processor  *process.Process
-	domains    []string
-	tlsConfig  *tls.Config
-	dnsbl      []string
-	check      bool
+	id          int
+	conn        net.Conn
+	hello       bool
+	clientName  string
+	ServerName  string
+	mailFrom    *address.MailAddress
+	rcptTo      []address.MailAddress
+	processor   *process.Process
+	domains     []string
+	tlsConfig   *tls.Config
+	dnsbl       []string
+	check       bool
+	insecuretls bool
+	nospf       bool
 }
 
-func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string) {
-	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, dnsbl, keyfile, certfile)
+func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
+	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
 	defer smtpConn.Close()
 	smtpConn.ProcessMessages()
 }
 
-func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string) *Conn {
+func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) *Conn {
 	// set tls config
 	var tlsConfig *tls.Config
 	certificate, err := tls.LoadX509KeyPair(certfile, keyfile)
@@ -68,8 +70,9 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 		log.Infof("error initializing tls config: %v", err)
 	} else {
 		tlsConfig = &tls.Config{
-			Certificates: []tls.Certificate{certificate},
-			MinVersion:   tls.VersionTLS12,
+			Certificates:       []tls.Certificate{certificate},
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: true,
 		}
 	}
 	clientIdLock.Lock()

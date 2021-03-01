@@ -23,18 +23,20 @@ const (
 )
 
 type Process struct {
-	smtpPool []client.SmtpClient
-	poolLock sync.RWMutex
-	rules    *rules.Rules
-	Hostname string
+	smtpPool    []client.SmtpClient
+	poolLock    sync.RWMutex
+	rules       *rules.Rules
+	Hostname    string
+	insecuretls bool
 }
 
-func NewProcessor(hostname string, processRules *rules.Rules) (*Process, error) {
+func NewProcessor(hostname string, processRules *rules.Rules, insecuretls bool) (*Process, error) {
 	process := &Process{
-		smtpPool: []client.SmtpClient{},
-		poolLock: sync.RWMutex{},
-		rules:    processRules,
-		Hostname: hostname,
+		smtpPool:    []client.SmtpClient{},
+		poolLock:    sync.RWMutex{},
+		rules:       processRules,
+		Hostname:    hostname,
+		insecuretls: insecuretls,
 	}
 	// start pool management
 	go process.ManagePools()
@@ -231,10 +233,11 @@ func (p *Process) addSMTP(domain string, mxs []*net.MX) int {
 	for _, mx := range mxs {
 		// create smtp client
 		client := &client.SmtpClient{
-			Relay:    mx.Host,
-			Domains:  []string{domain},
-			Hostname: p.Hostname,
-			LastSent: time.Now(),
+			Relay:       mx.Host,
+			Domains:     []string{domain},
+			Hostname:    p.Hostname,
+			LastSent:    time.Now(),
+			InsecureTLS: p.insecuretls,
 		}
 		err := client.StartSession()
 		if err != nil {

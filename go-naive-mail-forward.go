@@ -37,6 +37,8 @@ var (
 	dnsbl              string
 	check              bool
 	instrumentationKey string
+	insecuretls        bool
+	nospf              bool
 )
 
 func init() {
@@ -60,6 +62,8 @@ func init() {
 	flag.BoolVar(&gencert, "gencert", true, "generate certificate")
 	flag.BoolVar(&check, "check", false, "checks the server status")
 	flag.StringVar(&instrumentationKey, "instkey", "", "Azure application insight instrumentation key")
+	flag.BoolVar(&insecuretls, "insecuretls", false, "Allow insecure tls connections (client & server)")
+	flag.BoolVar(&nospf, "nospf", false, "disable spf checking")
 }
 
 func main() {
@@ -107,7 +111,7 @@ func main() {
 	defer listen.Close()
 
 	// create the processor
-	msgProcessor, err := process.NewProcessor(servername, forwardRules)
+	msgProcessor, err := process.NewProcessor(servername, forwardRules, insecuretls)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
@@ -119,7 +123,7 @@ func main() {
 		if err != nil {
 			log.Fatalf(err.Error())
 		}
-		go server.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile)
+		go server.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
 	}
 }
 

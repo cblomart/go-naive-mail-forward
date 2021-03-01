@@ -31,6 +31,7 @@ type SmtpClient struct {
 	Connected    bool
 	LastSent     time.Time
 	TlsSupported bool
+	InsecureTLS  bool
 }
 
 func (c *SmtpClient) Connect() error {
@@ -140,8 +141,9 @@ func (c *SmtpClient) StartTLS() error {
 	tlsConn := tls.Client(
 		c.conn,
 		&tls.Config{
-			MinVersion: tls.VersionTLS12,
-			ServerName: c.Relay,
+			MinVersion:         tls.VersionTLS12,
+			ServerName:         c.Relay,
+			InsecureSkipVerify: c.InsecureTLS,
 		},
 	)
 	log.Debugf("%s:%s: tls handshake", c.LocalPort, c.Relay)
