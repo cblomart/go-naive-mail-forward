@@ -3,6 +3,16 @@ FROM cblomart/gobasebuild:latest AS builder
 ENV GO111MODULE=on \
     CGO_ENABLED=1
 
+# install necessary tools
+RUN apt-get update &&\
+    apt-get install -y --no-install-recommends tzdata zip ca-certificates &&\
+    apt-get clean &&\
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# compress tzinfo
+WORKDIR /usr/share/zoneinfo
+RUN zip -q -r -0 /zoneinfo.zip .
+
 WORKDIR /build
 
 # cache modules that shouldn't change often
@@ -38,6 +48,13 @@ RUN mkdir /data
 
 # create the minimal image
 FROM scratch
+
+# set zoneinfo
+ENV ZONEINFO /zoneinfo.zip
+COPY --from=builder /zoneinfo.zip /
+
+# set ca-certificates
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # copy dist folder
 COPY --chown=0:0 --from=builder /dist /
