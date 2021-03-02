@@ -468,9 +468,7 @@ func (conn *Conn) readdata() (string, error) {
 			log.Infof("%s: %s\n", conn.showClient(), err.Error())
 			return "", fmt.Errorf("cannot read")
 		}
-		if Debug {
-			log.Infof("%s < %s\n", conn.showClient(), line)
-		}
+		log.Tracef("%s < %s\n", conn.showClient(), line)
 		if line == "." {
 			break
 		}
