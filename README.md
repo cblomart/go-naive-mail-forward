@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/cblomart/go-naive-mail-forward)](https://goreportcard.com/report/github.com/cblomart/go-naive-mail-forward)
 ![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/cblomart/go-naive-mail-forward?style=plastic)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)]((https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fcblomart%2Fgo-naive-mail-forward%2Fmaster%2Fazuredeploy.json))
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fcblomart%2Fgo-naive-mail-forward%2Fmaster%2Fazuredeploy.json)
 
 This project aims to provide mail forwarding service. 
 It does use a simple rules to describe the fowardings to operate.
