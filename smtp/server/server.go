@@ -225,9 +225,10 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	_, istls := conn.conn.(*tls.Conn)
 	if extended {
 		if conn.tlsConfig != nil && !istls {
-			return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS", "PIPELINING")
+			return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
 		}
-		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "PIPELINING")
+		// pipelining is not supported yet
+		//return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "PIPELINING")
 	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
