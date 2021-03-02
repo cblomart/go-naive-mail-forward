@@ -224,7 +224,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
 	if extended && conn.tlsConfig != nil && !istls {
-		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS")
+		return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), "STARTTLS", "PIPELINING")
 	}
 	return false, conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname))
 }
