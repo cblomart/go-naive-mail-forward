@@ -1,3 +1,7 @@
 .vscode
 Dockerfile
 go-naive-mail-forward
+azuredeploy.json
+*.crt
+*.key
+*.pem

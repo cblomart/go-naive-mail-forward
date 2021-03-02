@@ -1,0 +1,100 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "name": {
+        "type": "string",
+        "defaultValue": "acilinuxpublicipcontainergroup",
+        "metadata": {
+          "description": "Name for the container group"
+        }
+      },
+      "namelabel": {
+          "type": "string",
+          "metadata": {
+              "description": "dns name label"
+          }
+      },
+      "mx": {
+          "type": "string",
+          "metadata": {
+              "description": "mx name advertised"
+          }
+      },
+      "rules": {
+          "type": "string",
+          "metadata": {
+              "description": "forwarding rules to apply"
+          }
+      }
+
+    },
+    "variables": {
+        "image": "cblomart/go-naive-mail-forward:latest",
+        "port": "25",
+        "cpuCores": 1,
+        "memoryInGb": 1,
+        "location": "[resourceGroup().location]"
+    },
+    "resources": [
+      {
+        "type": "Microsoft.ContainerInstance/containerGroups",
+        "apiVersion": "2019-12-01",
+        "name": "[parameters('name')]",
+        "location": "[variables('location')]",
+        "properties": {
+          "containers": [
+            {
+              "name": "[parameters('name')]",
+              "properties": {
+                "image": "[variables('image')]",
+                "ports": [
+                  {
+                    "port": "[variables('port')]"
+                  }
+                ],
+                "environmentVariables": [
+                    {
+                        "name": "FORWARDER_RULES",
+                        "value": "[parameters('rules')]"
+                    },
+                    {
+                        "name": "FORWARDER_SERVERNAME",
+                        "value": "[parameters('mx')]"
+                    },
+                    {
+                        "name": "FORWARDER_NOSPF",
+                        "value": "true"
+                    }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "[variables('cpuCores')]",
+                    "memoryInGb": "[variables('memoryInGb')]"
+                  }
+                }
+              }
+            }
+          ],
+          "osType": "Linux",
+          "restartPolicy": "always",
+          "ipAddress": {
+            "type": "Public",
+            "dnsNameLabel": "[parameters('namelabel')]",
+            "ports": [
+              {
+                "protocol": "Tcp",
+                "port": "[variables('port')]"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "outputs": {
+      "containerIPv4Address": {
+        "type": "string",
+        "value": "[reference(resourceId('Microsoft.ContainerInstance/containerGroups/', parameters('name'))).ipAddress.ip]"
+      }
+    }
+  }
