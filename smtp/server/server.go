@@ -123,7 +123,7 @@ func (conn *Conn) ProcessMessages() {
 		// get command and params
 		cmd, params, err := conn.request()
 		if err != nil {
-			// log connection  drops as debug
+			// log connection drops as debug
 			if err.Error() != "connection dropped" {
 				log.Errorf("%s: %s\n", conn.showClient(), err.Error())
 			} else {
@@ -278,7 +278,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 	_, istls := conn.conn.(*tls.Conn)
 	capabilities := []string{}
 	if extended {
-		capabilities = append(capabilities, "PIPELINING")
+		capabilities = append(capabilities, "PIPELINING", "8BITMIME")
 		if !istls && conn.tlsConfig != nil {
 			capabilities = append(capabilities, "STARTTLS")
 		}
