@@ -511,8 +511,9 @@ func (conn *Conn) data() (bool, error) {
 	log.Infof("%s: message %s recieved", conn.showClient(), msg.Id)
 	elapsed := int(endrec - startrec)
 	size := len(data)
-	speed := size / elapsed / 1024
-	return conn.send(false, smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %d secs (%.2f KBps)", size, elapsed, speed))
+	speed := size * 100 / elapsed / 1024
+	speedtxt := fmt.Sprintf("%d", speed)
+	return conn.send(false, smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %d secs (%s.%s KBps)", size, elapsed, speedtxt[:len(speedtxt)-3], speedtxt[len(speedtxt)-3:]))
 }
 
 func (conn *Conn) readdata() (string, error) {
