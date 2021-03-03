@@ -219,9 +219,9 @@ func (conn *Conn) processBuffer() (bool, error) {
 	for _, r := range conn.sendBuffer {
 		// send extra answers
 		if len(r.Extra) > 0 {
-			for _, e := range resp.Extra {
-				log.Tracef("%s > %d-%s\n", conn.showClient(), status, e)
-				_, err := fmt.Fprintf(conn.conn, "%d-%s\r\n", status, e)
+			for _, e := range r.Extra {
+				log.Tracef("%s > %d-%s\n", conn.showClient(), r.Code, e)
+				_, err := fmt.Fprintf(conn.conn, "%d-%s\r\n", r.Code, e)
 				if err != nil {
 					return true, err
 				}
