@@ -208,8 +208,13 @@ func (conn *Conn) send(buffer bool, status int, message string, extra ...string)
 	if conn.extended && buffer {
 		return false, nil
 	}
+	// process responses in buffer
+	return conn.processBuffer()
+}
+
+func (conn *Conn) processBuffer() (bool, error) {
 	// init the globalstatus
-	globalstatus := status
+	globalstatus := 0
 	// send each responses
 	for _, r := range conn.sendBuffer {
 		// send extra answers
@@ -237,7 +242,6 @@ func (conn *Conn) send(buffer bool, status int, message string, extra ...string)
 	conn.sendBuffer = []Response{}
 	// check if should quit
 	quit := globalstatus > smtp.STATUSERROR || globalstatus == smtp.STATUSBYE
-	// return
 	return quit, nil
 }
 
@@ -555,7 +559,9 @@ func (conn *Conn) request() (string, string, error) {
 	reader := bufio.NewReader(conn.conn)
 	// get a text proto reader
 	tp := textproto.NewReader(reader)
+	log.Debugf("reading line")
 	command, err := tp.ReadLine()
+	log.Debugf("read line")
 	if err != nil {
 		if err == io.EOF {
 			return "", "", fmt.Errorf("connection dropped")
