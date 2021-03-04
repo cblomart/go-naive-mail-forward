@@ -26,30 +26,37 @@ func NewMailAddress(address string) (*MailAddress, error) {
 		User:   parts[0],
 		Domain: parts[1],
 	}
-	if !ma.isValid() {
-		return nil, fmt.Errorf("invalid address")
+	err := ma.isValid()
+	if err != nil {
+		return nil, err
 	}
 	return ma, nil
 }
 
-func (ma *MailAddress) isValid() bool {
+func (ma *MailAddress) isValid() error {
 	// user and domain must be present
-	if len(ma.User) == 0 || len(ma.Domain) == 0 {
-		return false
+	if len(ma.User) == 0 {
+		return fmt.Errorf("address has no user")
+	}
+	if len(ma.Domain) == 0 {
+		return fmt.Errorf("address has no domain")
 	}
 	// user and domain must be in a proper format
-	if !UserMatch.MatchString(ma.User) || !DomainMatch.MatchString(ma.Domain) {
-		return false
+	if !UserMatch.MatchString(ma.User) {
+		return fmt.Errorf("address user in incorect format")
+	}
+	if !DomainMatch.MatchString(ma.Domain) {
+		return fmt.Errorf("address domain in incorect format")
 	}
 	// mail exchangers must be known
 	mxs, err := net.LookupMX(ma.Domain)
 	if err != nil {
-		return false
+		return fmt.Errorf("cannot get mx for %s", ma.Domain)
 	}
 	if len(mxs) == 0 {
-		return false
+		return fmt.Errorf("no mx known for %s", ma.Domain)
 	}
-	return true
+	return nil
 }
 
 func (ma *MailAddress) String() string {

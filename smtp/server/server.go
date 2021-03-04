@@ -10,9 +10,11 @@ import (
 	"cblomart/go-naive-mail-forward/utils"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/textproto"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,43 +25,54 @@ import (
 )
 
 const (
-	Localhost   = "localhost"
-	Healthcheck = "healthcheck"
+	Localhost       = "localhost"
+	Healthcheck     = "healthcheck"
+	timeoutDuration = 100 * time.Millisecond
 )
 
 var (
 	Trace        = false
 	Debug        = false
 	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
+	BdataParams  = regexp.MustCompile(`(?i)^[0-9]+( +LAST)?$`)
 	clientId     = 0
 	clientIdLock = sync.RWMutex{}
-	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "STARTTLS"}
-	noPipeline   = []string{"EHLO", "HELO", "QUIT", "STARTTLS", "NOOP", "DATA", "DEBUG", "TRACE"}
+	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
+	noPipeline   = []string{"EHLO", "HELO", "QUIT", "STARTTLS", "NOOP", "DATA", "BDAT", "DEBUG", "TRACE"}
 )
 
 //Conn is a smtp client connection
 type Conn struct {
-	id         int
-	conn       net.Conn
-	hello      bool
-	extended   bool
-	clientName string
-	ServerName string
-	mailFrom   *address.MailAddress
-	rcptTo     []address.MailAddress
-	processor  *process.Process
-	domains    []string
-	tlsConfig  *tls.Config
-	dnsbl      []string
-	check      bool
-	nospf      bool
-	sendBuffer []Response
+	id             int
+	conn           net.Conn
+	hello          bool
+	extended       bool
+	clientName     string
+	ServerName     string
+	mailFrom       *address.MailAddress
+	rcptTo         []address.MailAddress
+	processor      *process.Process
+	domains        []string
+	tlsConfig      *tls.Config
+	dnsbl          []string
+	check          bool
+	nospf          bool
+	sendBuffer     []Response
+	recieveBuffer  []byte
+	recieveBufferN int
+	dataBuffer     []byte
+	dataStart      int64
+	dataFinish     int64
 }
 
 type Response struct {
 	Code    int
 	Message string
 	Extra   []string
+}
+
+func (r *Response) String() string {
+	return fmt.Sprintf("%d %s (+%s)", r.Code, r.Message, strings.Join(r.Extra, ","))
 }
 
 func HandleSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
@@ -87,18 +100,20 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 	id := clientId + 1
 	clientId++
 	return &Conn{
-		id:         id,
-		conn:       conn,
-		hello:      false,
-		clientName: "",
-		ServerName: serverName,
-		mailFrom:   nil,
-		rcptTo:     make([]address.MailAddress, 0),
-		processor:  processor,
-		domains:    domains,
-		tlsConfig:  tlsConfig,
-		dnsbl:      strings.Split(dnsbl, ","),
-		nospf:      nospf,
+		id:            id,
+		conn:          conn,
+		hello:         false,
+		clientName:    "",
+		ServerName:    serverName,
+		mailFrom:      nil,
+		rcptTo:        make([]address.MailAddress, 0),
+		processor:     processor,
+		domains:       domains,
+		tlsConfig:     tlsConfig,
+		dnsbl:         strings.Split(dnsbl, ","),
+		nospf:         nospf,
+		recieveBuffer: make([]byte, 1024),
+		dataBuffer:    []byte{},
 	}
 }
 
@@ -161,13 +176,12 @@ func (conn *Conn) processLine(line string, last bool) bool {
 	conn.execCommand(cmd, params)
 	if utils.ContainsString(noPipeline, cmd) >= 0 || last {
 		quit, err := conn.processBuffer()
-		log.Debugf("%s: recieved quit:%v err:%v", conn.showClient(), quit, err)
 		if err != nil {
 			log.Errorf("%s: %s\n", conn.showClient(), err.Error())
 		}
 		return quit
 	}
-	return true
+	return false
 }
 
 //gocyclo complains because of cases
@@ -198,6 +212,9 @@ func (conn *Conn) execCommand(cmd, params string) {
 	case "DATA":
 		//no pipeline
 		conn.data()
+	case "BDAT":
+		//no pipeline
+		conn.binarydata(params)
 	case "DEBUG":
 		//no pipeline
 		log.SetDebug(params)
@@ -301,7 +318,7 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	_, istls := conn.conn.(*tls.Conn)
 	capabilities := []string{}
 	if extended {
-		capabilities = append(capabilities, "PIPELINING", "8BITMIME")
+		capabilities = append(capabilities, "PIPELINING", "8BITMIME", "CHUNKING")
 		if !istls && conn.tlsConfig != nil {
 			capabilities = append(capabilities, "STARTTLS")
 		}
@@ -398,20 +415,20 @@ func (conn *Conn) mailfrom(param string) {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
 		log.Errorf("%s: mail from %s not valid", conn.showClient(), ma)
-		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("from <%s> nok", param))
+		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("from %s nok", param))
 		return
 	}
 	log.Debugf("%s: mail from %s", conn.showClient(), ma)
 	conn.mailFrom = ma
 	conn.rcptTo = make([]address.MailAddress, 0)
-	conn.send(smtp.STATUSOK, fmt.Sprintf("from <%s> ok", param))
+	conn.send(smtp.STATUSOK, fmt.Sprintf("from %s ok", param))
 }
 
 func (conn *Conn) rcptto(param string) {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
-		log.Errorf("%s: recipient %s not valid", conn.showClient(), ma)
-		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("rcpt <%s> nok", param))
+		log.Errorf("%s: recipient %s not valid: %s", conn.showClient(), param, err)
+		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("recipient %s nok", param))
 		return
 	}
 	acceptedDomain := false
@@ -422,8 +439,8 @@ func (conn *Conn) rcptto(param string) {
 		}
 	}
 	if !acceptedDomain {
-		log.Errorf("%s: recipient %s not in a valid domain", conn.showClient(), ma)
-		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("rcpt <%s> domain nok", param))
+		log.Errorf("%s: recipient %s not in a valid domain", conn.showClient(), ma.String())
+		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("recipient %s domain nok", param))
 		return
 	}
 	// check if recipient already given
@@ -442,7 +459,7 @@ func (conn *Conn) rcptto(param string) {
 		addresses[i] = ma.String()
 	}
 	log.Debugf("%s: sending to %s", conn.showClient(), strings.Join(addresses, ";"))
-	conn.send(smtp.STATUSOK, fmt.Sprintf("rcpt <%s> ok", param))
+	conn.send(smtp.STATUSOK, fmt.Sprintf("recipient %s ok", param))
 }
 
 func (conn *Conn) getTrace() string {
@@ -480,7 +497,122 @@ func (conn *Conn) getTrace() string {
 }
 
 func (conn *Conn) data() {
-	log.Debugf("%s: recieveing data", conn.showClient())
+	// check before sending
+	conn.checkdata()
+
+	// accept to recieve data
+	conn.send(smtp.STATUSACT, "send the message")
+
+	// process send buffer (pipelining)
+	_, err := conn.processBuffer()
+	if err != nil {
+		log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+		return
+	}
+
+	// start of data transmission
+	conn.dataStart = time.Now().Unix()
+
+	// read from input
+	data, err := conn.readdata()
+	if err != nil {
+		log.Infof("%s: %s\n", conn.showClient(), err.Error())
+	}
+
+	// if empty body return
+	if len(data) == 0 {
+		log.Warnf("%s: message empty", conn.showClient())
+		conn.send(smtp.STATUSFAIL, "empty message")
+		return
+	}
+
+	// end of data transmission
+	conn.dataFinish = time.Now().Unix()
+
+	// save to storage
+	msg := message.Message{
+		Id:   uuid.NewString(),
+		From: conn.mailFrom,
+		To:   conn.rcptTo,
+		Data: data,
+	}
+
+	conn.sendmessage(msg)
+}
+
+func (conn *Conn) binarydata(params string) {
+	// check before sending
+	conn.checkdata()
+
+	//check bdata params
+	if !BdataParams.MatchString(params) {
+		log.Errorf("%s: message empty", conn.showClient())
+		conn.send(smtp.STATUSERROR, "syntax error")
+		return
+	}
+
+	// parse parameters
+	parts := strings.Split(params, " ")
+	datalen, err := strconv.Atoi(parts[0])
+	if err != nil {
+		log.Errorf("%s: invalid length", conn.showClient())
+		conn.send(smtp.STATUSERROR, "invalid length")
+		return
+	}
+	last := len(parts) == 2
+
+	// process send buffer (pipelining)
+	_, err = conn.processBuffer()
+	if err != nil {
+		log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+		return
+	}
+
+	// binary data recieves directly
+	conn.dataStart = time.Now().Unix()
+
+	if datalen > 0 {
+		// declare a buffer of the right length
+		buffer := make([]byte, datalen)
+
+		// read the data
+		_, err = io.ReadFull(conn.conn, buffer)
+		if err != nil {
+			log.Errorf("%s: issue while reading", conn.showClient())
+			conn.send(smtp.STATUSTMPER, "issue while reading")
+			return
+		}
+		log.Infof("%s: recieved %d bytes", conn.showClient(), len(buffer))
+
+		// append to data buffer
+		conn.dataBuffer = append(conn.dataBuffer, buffer...)
+	}
+
+	// if not the last chunk continue as usual
+	if !last {
+		conn.send(smtp.STATUSOK, fmt.Sprintf("%s: recieved %d bytes", conn.showClient(), datalen))
+		return
+	}
+
+	conn.dataFinish = time.Now().Unix()
+
+	// save to storage
+	msg := message.Message{
+		Id:   uuid.NewString(),
+		From: conn.mailFrom,
+		To:   conn.rcptTo,
+		Data: string(conn.dataBuffer),
+	}
+
+	// clear databuffer
+	conn.dataBuffer = []byte{}
+
+	// send the message
+	conn.sendmessage(msg)
+}
+
+func (conn *Conn) checkdata() {
+	log.Debugf("%s: check before recieving data", conn.showClient())
 
 	// check if from and to ar there
 	if len(conn.rcptTo) == 0 || conn.mailFrom == nil {
@@ -495,42 +627,20 @@ func (conn *Conn) data() {
 	if !isTLS {
 		log.Warnf("%s: recieving message over clear text", conn.showClient())
 	}
+}
 
-	// accept to recieve data
-	conn.send(smtp.STATUSACT, "send the message")
-	_, err := conn.processBuffer()
-	if err != nil {
-		log.Errorf("%s: %s\n", conn.showClient(), err.Error())
-		return
-	}
+func (conn *Conn) sendmessage(msg message.Message) {
+	log.Infof("%s: message %s (%d bytes) to %v", conn.showClient(), msg.Id, len(msg.Data), msg.Recipients())
 
-	// start of data transmission
-	startrec := time.Now().Unix()
-
-	// read from input
-	data, err := conn.readdata()
-	if err != nil {
-		log.Infof("%s: %s\n", conn.showClient(), err.Error())
-	}
-
-	// end of data transmission
-	endrec := time.Now().Unix()
-
-	// save to storage
-	msg := message.Message{
-		Id:   uuid.NewString(),
-		From: conn.mailFrom,
-		To:   conn.rcptTo,
-		Data: data,
-	}
-	log.Infof("%s: message %s (%d bytes) to %v", conn.showClient(), msg.Id, len(data), msg.Recipients())
 	accept, _ := conn.spfCheck("", 0)
 	if !accept && !msg.Signed() {
 		log.Warnf("%s: message %s is not signed and refused by SPF checks", conn.showClient(), msg.Id)
 		conn.send(smtp.STATUSNOPOL, "spf failed")
 		return
 	}
+
 	msgID, reject, err := conn.processor.Handle(msg)
+
 	if err != nil {
 		log.Errorf("%s:%s: error handling message: %s", conn.showClient(), msgID, err.Error())
 		if reject {
@@ -540,11 +650,14 @@ func (conn *Conn) data() {
 		conn.send(smtp.STATUSTMPER, "could not handle message")
 		return
 	}
+
 	log.Infof("%s: message %s recieved", conn.showClient(), msg.Id)
-	elapsed := int(endrec - startrec)
-	size := len(data)
+
+	elapsed := int(conn.dataFinish - conn.dataStart)
+	size := len(msg.Data)
 	speed := size * 100 / elapsed / 1024
 	speedtxt := fmt.Sprintf("%d", speed)
+
 	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %d secs (%s.%s KBps)", size, elapsed, speedtxt[:len(speedtxt)-3], speedtxt[len(speedtxt)-3:]))
 }
 
@@ -583,11 +696,10 @@ func (conn *Conn) quit() {
 }
 
 func (conn *Conn) parse(command string) (string, string, error) {
+	log.Tracef("%s < %s\n", conn.showClient(), command)
 	if !IsAsciiPrintable(command) {
-		log.Infof("%s: command contains non ascii printable characters\n", conn.showClient())
 		return "", "", fmt.Errorf("command contains non ascii printable characters")
 	}
-	log.Tracef("%s < %s\n", conn.showClient(), command)
 	if len(command) < 4 {
 		log.Debugf("%s: command too small\n", conn.showClient())
 		return command, "", nil
@@ -607,29 +719,55 @@ func (conn *Conn) parse(command string) (string, string, error) {
 }
 
 func (conn *Conn) readlines() ([]string, error) {
-	// create buffer
-	buffer := make([]byte, 1024)
+	defer conn.conn.SetReadDeadline(time.Time{})
+	// make the buffer of line read
+	lines := []string{}
 
-	// read to buffer
-	n, err := conn.conn.Read(buffer)
+	// read byte per byte
+	for {
+		// set the time out for this byte read
+		// #nosec G104
+		conn.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
 
-	// check if connection dropped
-	if n == 0 {
-		return nil, fmt.Errorf("connection dropped")
+		// buffer for byte to read
+		b := make([]byte, 1)
+
+		// read from connection
+		n, err := conn.conn.Read(b)
+
+		if err == io.EOF {
+			if len(lines) > 0 {
+				return lines, nil
+			}
+			return nil, err
+		}
+
+		if n == 0 {
+			if len(lines) > 0 {
+				return lines, nil
+			}
+			continue
+		}
+
+		// add the line if recieve new line
+		if b[0] == '\n' {
+			lines = append(lines, string(conn.recieveBuffer[:conn.recieveBufferN]))
+			conn.recieveBufferN = 0
+			continue
+		}
+
+		// ignore line feeds
+		if b[0] == '\r' {
+			continue
+		}
+
+		// send an error if character is not ascii
+		if !IsAscii(b[0]) {
+			return nil, fmt.Errorf("recievied non ascii input '%d'", b[0])
+		}
+
+		// add the read character to the buffer
+		conn.recieveBuffer[conn.recieveBufferN] = b[0]
+		conn.recieveBufferN++
 	}
-
-	// check read errors
-	if err != nil {
-		log.Infof("%s: %s\n", conn.showClient(), err.Error())
-		return nil, fmt.Errorf("cannot read")
-	}
-
-	// get text from read buffer
-	text := string(buffer[0:n])
-
-	// simplify line feeds
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-
-	// return lines
-	return strings.Split(text, "\n"), nil
 }

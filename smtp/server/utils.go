@@ -40,11 +40,15 @@ func ExpandIp6(shortip6 string) string {
 
 func IsAsciiPrintable(text string) bool {
 	for _, c := range text {
-		if c < 32 && c > 126 {
+		if !IsAscii(byte(c)) {
 			return false
 		}
 	}
 	return true
+}
+
+func IsAscii(c byte) bool {
+	return c >= 32 && c <= 126
 }
 
 func Reverse(slice []string) []string {

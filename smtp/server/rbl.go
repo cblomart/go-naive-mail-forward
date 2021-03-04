@@ -9,6 +9,10 @@ import (
 )
 
 func (conn *Conn) checkRBL(hostname string) bool {
+	if strings.EqualFold(hostname, Localhost) {
+		// localhost cannot be bad
+		return false
+	}
 	// check dns blacklist per ip
 	bad := CheckRBLAddr(conn.conn.RemoteAddr(), conn.dnsbl)
 	if !bad {

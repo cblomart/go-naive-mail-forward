@@ -143,7 +143,7 @@ func (c *SmtpClient) StartTLS() error {
 		c.conn,
 		&tls.Config{
 			MinVersion:         tls.VersionTLS12,
-			ServerName:         c.Relay,
+			ServerName:         strings.ToLower(strings.TrimRight(c.Relay, ".")),
 			InsecureSkipVerify: c.InsecureTLS,
 		},
 	)
