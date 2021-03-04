@@ -761,6 +761,11 @@ func (conn *Conn) readlines() ([]string, error) {
 			continue
 		}
 
+		// replace tab by space
+		if b[0] == '\t' {
+			b[0] = ' '
+		}
+
 		// send an error if character is not ascii
 		if !IsAscii(b[0]) {
 			return nil, fmt.Errorf("recievied non ascii input '%d'", b[0])
