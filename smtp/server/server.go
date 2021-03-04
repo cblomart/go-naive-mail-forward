@@ -139,7 +139,7 @@ func (conn *Conn) ProcessMessages() {
 		lines, err := conn.readlines()
 		if err != nil {
 			// log connection drops as debug
-			if err.Error() != "connection dropped" {
+			if err != io.EOF {
 				log.Errorf("%s: %s\n", conn.showClient(), err.Error())
 			} else {
 				log.Debugf("%s: %s\n", conn.showClient(), err.Error())
