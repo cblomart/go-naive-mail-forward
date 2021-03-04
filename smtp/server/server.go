@@ -1,4 +1,3 @@
-//lint:file-ignore SA4006 something wrong with variable usage detection
 package server
 
 import (
@@ -11,7 +10,6 @@ import (
 	"cblomart/go-naive-mail-forward/utils"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"net"
 	"net/textproto"
 	"regexp"
@@ -355,8 +353,8 @@ func (conn *Conn) rset() {
 }
 
 func (conn *Conn) starttls() {
-	tlsConn, ok := conn.conn.(*tls.Conn)
-	if ok {
+	_, isTLS := conn.conn.(*tls.Conn)
+	if isTLS {
 		log.Warnf("%s: connection already tls", conn.showClient())
 		conn.send(smtp.STATUSNOTLS, "connection already tls")
 		return
@@ -374,7 +372,7 @@ func (conn *Conn) starttls() {
 		log.Infof("%s: could not respond to client %s", conn.showClient(), err.Error())
 		return
 	}
-	tlsConn = tls.Server(conn.conn, conn.tlsConfig)
+	tlsConn := tls.Server(conn.conn, conn.tlsConfig)
 	log.Debugf("%s: tls handshake", conn.showClient())
 	err = tlsConn.Handshake()
 	if err != nil {
@@ -401,7 +399,6 @@ func (conn *Conn) mailfrom(param string) {
 	conn.mailFrom = ma
 	conn.rcptTo = make([]address.MailAddress, 0)
 	conn.send(smtp.STATUSOK, fmt.Sprintf("from <%s> ok", param))
-	return
 }
 
 func (conn *Conn) rcptto(param string) {
@@ -629,20 +626,4 @@ func (conn *Conn) readlines() ([]string, error) {
 
 	// return lines
 	return strings.Split(text, "\n"), nil
-}
-
-func (conn *Conn) request() (string, string, error) {
-	// get a buffer reader
-	reader := bufio.NewReader(conn.conn)
-	// get a text proto reader
-	tp := textproto.NewReader(reader)
-	command, err := tp.ReadLine()
-	if err != nil {
-		if err == io.EOF {
-			return "", "", fmt.Errorf("connection dropped")
-		}
-		log.Infof("%s: %s\n", conn.showClient(), err.Error())
-		return "", "", fmt.Errorf("cannot read")
-	}
-	return conn.parse(command)
 }
