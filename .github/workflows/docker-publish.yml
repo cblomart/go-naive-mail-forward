@@ -54,3 +54,26 @@ jobs:
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+  
+  deploy:
+
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: 'Login via Azure CLI'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: 'Deploy to Azure Container Instances'
+        uses: 'azure/aci-deploy@v1'
+        with:
+          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          name: go-naive-mail-forward
+          dns-name-label: gomxzerottl
+          image: ${{ github.repository }}:latest
+          environment-variables: FORWARDER_RULES="@tst.zerottl.cc:cblomart@microsoft.com" FORWARDER_SERVERNAME="mx.zerottl.cc" FORWARDER_NOSPF="true"
+          ip-address: public
+          ports: 25
+          location: 'westeurope'

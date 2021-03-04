@@ -545,7 +545,6 @@ func (conn *Conn) binarydata(params string) {
 	conn.checkdata()
 
 	//check bdata params
-	log.Debugf("%s: checking params %s", conn.showClient(), params)
 	if !BdataParams.MatchString(params) {
 		log.Errorf("%s: message empty", conn.showClient())
 		conn.send(smtp.STATUSERROR, "syntax error")
@@ -553,7 +552,6 @@ func (conn *Conn) binarydata(params string) {
 	}
 
 	// parse parameters
-	log.Debugf("%s: parsing paramteres %s", conn.showClient(), params)
 	parts := strings.Split(params, " ")
 	datalen, err := strconv.Atoi(parts[0])
 	if err != nil {
@@ -574,7 +572,7 @@ func (conn *Conn) binarydata(params string) {
 		buffer := make([]byte, datalen)
 
 		// read the data
-		_, err = io.ReadFull(conn.conn, buffer)
+		n, err := conn.conn.Read(buffer)
 		if err != nil {
 			log.Errorf("%s: issue while reading", conn.showClient())
 			conn.send(smtp.STATUSTMPER, "issue while reading")
@@ -582,6 +580,12 @@ func (conn *Conn) binarydata(params string) {
 		}
 		log.Infof("%s: recieved %d bytes", conn.showClient(), len(buffer))
 
+		// check if we have enough
+		if n != datalen {
+			log.Errorf("%s: unexpected size %d bytes", conn.showClient(), n)
+			conn.send(smtp.STATUSTMPER, "unexpected size")
+			return
+		}
 		// append to data buffer
 		conn.dataBuffer = append(conn.dataBuffer, buffer...)
 	}
