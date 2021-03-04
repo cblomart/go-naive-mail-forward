@@ -134,34 +134,40 @@ func (conn *Conn) ProcessMessages() {
 		stop := false
 		l := len(lines) - 1
 		for i, line := range lines {
-			// get command and params
-			cmd, params, err := conn.parse(line)
-			if err != nil {
-				log.Errorf("%s: %s\n", conn.showClient(), err.Error())
-				stop = true
+			stop = conn.processLine(line, i == l)
+			if stop {
 				break
-			}
-			// check for commands that needs hello
-			if utils.ContainsString(needHelo, cmd) >= 0 && !conn.hello {
-				log.Errorf("%s: no hello before '%s'\n", conn.showClient(), cmd)
-				conn.send(smtp.STATUSBADSEC, "please say hello first")
-				stop = true
-				break
-			}
-			conn.execCommand(cmd, params)
-			if utils.ContainsString(noPipeline, cmd)|l == i {
-				quit, err := conn.processBuffer()
-				log.Debugf("%s: recieved quit:%v err:%v", conn.showClient(), quit, err)
-				if err != nil {
-					log.Errorf("%s: %s\n", conn.showClient(), err.Error())
-				}
-				stop = quit
 			}
 		}
 		if stop {
 			break
 		}
 	}
+}
+
+func (conn *Conn) processLine(line string, last bool) bool {
+	// get command and params
+	cmd, params, err := conn.parse(line)
+	if err != nil {
+		log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+		return true
+	}
+	// check for commands that needs hello
+	if utils.ContainsString(needHelo, cmd) >= 0 && !conn.hello {
+		log.Errorf("%s: no hello before '%s'\n", conn.showClient(), cmd)
+		conn.send(smtp.STATUSBADSEC, "please say hello first")
+		return true
+	}
+	conn.execCommand(cmd, params)
+	if utils.ContainsString(noPipeline, cmd) >= 0 || last {
+		quit, err := conn.processBuffer()
+		log.Debugf("%s: recieved quit:%v err:%v", conn.showClient(), quit, err)
+		if err != nil {
+			log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+		}
+		return quit
+	}
+	return true
 }
 
 //gocyclo complains because of cases
