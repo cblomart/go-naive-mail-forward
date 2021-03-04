@@ -36,6 +36,7 @@ var (
 	clientId     = 0
 	clientIdLock = sync.RWMutex{}
 	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "STARTTLS"}
+	noPipeline   = []string{"EHLO", "HELO", "QUIT", "STARTTLS", "NOOP", "DATA", "DEBUG", "TRACE"}
 )
 
 //Conn is a smtp client connection
@@ -63,8 +64,8 @@ type Response struct {
 	Extra   []string
 }
 
-func HandleSmtpConn(tcpConn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
-	smtpConn := NewSmtpConn(tcpConn, serverName, processor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
+func HandleSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
+	smtpConn := NewSmtpConn(conn, serverName, processor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
 	defer smtpConn.Close()
 	smtpConn.ProcessMessages()
 }
@@ -113,15 +114,16 @@ func (conn *Conn) Close() error {
 func (conn *Conn) ProcessMessages() {
 	log.Debugf("%s: new connection from %s\n", conn.showClient(), conn.conn.RemoteAddr().String())
 	// acknowlege the new comer
-	_, err := conn.ack()
+	conn.ack()
+	_, err := conn.processBuffer()
 	if err != nil {
 		log.Errorf("%s: %s\n", conn.showClient(), err.Error())
 		return
 	}
 	// start the command response session
 	for {
-		// get command and params
-		cmd, params, err := conn.request()
+		// read lines from input
+		lines, err := conn.readlines()
 		if err != nil {
 			// log connection drops as debug
 			if err.Error() != "connection dropped" {
@@ -131,18 +133,34 @@ func (conn *Conn) ProcessMessages() {
 			}
 			break
 		}
-		// check for commands that needs hello
-		if utils.ContainsString(needHelo, cmd) >= 0 && !conn.hello {
-			log.Errorf("%s: no hello before '%s'\n", conn.showClient(), cmd)
-			_, err = conn.send(false, smtp.STATUSBADSEC, "please say hello first")
-			break
+		stop := false
+		l := len(lines) - 1
+		for i, line := range lines {
+			// get command and params
+			cmd, params, err := conn.parse(line)
+			if err != nil {
+				log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+				stop = true
+				break
+			}
+			// check for commands that needs hello
+			if utils.ContainsString(needHelo, cmd) >= 0 && !conn.hello {
+				log.Errorf("%s: no hello before '%s'\n", conn.showClient(), cmd)
+				conn.send(smtp.STATUSBADSEC, "please say hello first")
+				stop = true
+				break
+			}
+			conn.execCommand(cmd, params)
+			if utils.ContainsString(noPipeline, cmd)|l == i {
+				quit, err := conn.processBuffer()
+				log.Debugf("%s: recieved quit:%v err:%v", conn.showClient(), quit, err)
+				if err != nil {
+					log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+				}
+				stop = quit
+			}
 		}
-		quit, err := conn.execCommand(cmd, params)
-		log.Debugf("%s: recieved quit:%v err:%v", conn.showClient(), quit, err)
-		if err != nil {
-			log.Errorf("%s: %s\n", conn.showClient(), err.Error())
-		}
-		if quit {
+		if stop {
 			break
 		}
 	}
@@ -150,42 +168,42 @@ func (conn *Conn) ProcessMessages() {
 
 //gocyclo complains because of cases
 //gocyclo:ignore
-func (conn *Conn) execCommand(cmd, params string) (bool, error) {
+func (conn *Conn) execCommand(cmd, params string) {
 	switch cmd {
 	case "QUIT":
 		//no pipeline
-		return conn.quit()
+		conn.quit()
 	case "HELO", "EHLO":
 		//no pipeline
-		return conn.helo(params, cmd == "EHLO")
+		conn.helo(params, cmd == "EHLO")
 	case "STARTTLS":
 		//no pipline
-		return conn.starttls()
+		conn.starttls()
 	case "NOOP":
 		//no pipeline
-		return conn.noop(params)
+		conn.noop(params)
 	case "RSET":
 		//pipeline caching
-		return conn.rset()
+		conn.rset()
 	case "MAIL FROM":
 		//pipeline caching
-		return conn.mailfrom(params)
+		conn.mailfrom(params)
 	case "RCPT TO":
 		//pipeline caching
-		return conn.rcptto(params)
+		conn.rcptto(params)
 	case "DATA":
 		//no pipeline
-		return conn.data()
+		conn.data()
 	case "DEBUG":
 		//no pipeline
 		log.SetDebug(params)
-		return conn.send(false, smtp.STATUSOK, log.GetDebug())
+		conn.send(smtp.STATUSOK, log.GetDebug())
 	case "TRACE":
 		//no pipeline
 		log.SetTrace(params)
-		return conn.send(false, smtp.STATUSOK, log.GetTrace())
+		conn.send(smtp.STATUSOK, log.GetTrace())
 	default:
-		return conn.unknown(cmd)
+		conn.unknown(cmd)
 	}
 }
 
@@ -195,7 +213,7 @@ func (conn *Conn) showClient() string {
 	return fmt.Sprintf("%04d", conn.id)
 }
 
-func (conn *Conn) send(buffer bool, status int, message string, extra ...string) (bool, error) {
+func (conn *Conn) send(status int, message string, extra ...string) {
 	// create new response object
 	resp := Response{
 		Code:    status,
@@ -204,12 +222,6 @@ func (conn *Conn) send(buffer bool, status int, message string, extra ...string)
 	}
 	// add it to the buffer
 	conn.sendBuffer = append(conn.sendBuffer, resp)
-	// stop there if extended ehlo (pipelining) and buffer command
-	if conn.extended && buffer {
-		return false, nil
-	}
-	// process responses in buffer
-	return conn.processBuffer()
 }
 
 func (conn *Conn) processBuffer() (bool, error) {
@@ -245,34 +257,37 @@ func (conn *Conn) processBuffer() (bool, error) {
 	return quit, nil
 }
 
-func (conn *Conn) ack() (bool, error) {
+func (conn *Conn) ack() {
 	// be sure the send buffer is empty
 	conn.sendBuffer = []Response{}
 	// hello client
-	return conn.send(false, smtp.STATUSRDY, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
+	conn.send(smtp.STATUSRDY, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
 }
 
-func (conn *Conn) unknown(command string) (bool, error) {
+func (conn *Conn) unknown(command string) {
 	log.Warnf("%s: syntax error: '%s'\n", conn.showClient(), command)
-	return conn.send(false, smtp.STATUSERROR, "syntax error")
+	conn.send(smtp.STATUSERROR, "syntax error")
 }
 
-func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
+func (conn *Conn) helo(hostname string, extended bool) {
 	log.Debugf("%s: checking hostname: %s", conn.showClient(), hostname)
 	if !conn.hostnameChecks(hostname) {
-		return conn.send(false, smtp.STATUSNOACK, "malformed hostname")
+		conn.send(smtp.STATUSNOACK, "malformed hostname")
+		return
 	}
 	log.Debugf("%s: checking if legit localhost: %s", conn.showClient(), hostname)
 	// check that localhost connections comes from localhost
 	if strings.EqualFold(hostname, Localhost) && !conn.ipIsLocal() {
 		log.Warnf("%s: localhost but not local ip: '%s'\n", conn.showClient(), hostname)
-		return conn.send(false, smtp.STATUSNOACK, "invalid localhost handshake")
+		conn.send(smtp.STATUSNOACK, "invalid localhost handshake")
+		return
 	}
 	log.Debugf("%s: checking RBL: %s", conn.showClient(), hostname)
 	// check balacklist
 	if conn.checkRBL(hostname) {
 		log.Warnf("%s: known bad actor: '%s'\n", conn.showClient(), hostname)
-		return conn.send(false, smtp.STATUSNOACK, "flagged in reverse black list")
+		conn.send(smtp.STATUSNOACK, "flagged in reverse black list")
+		return
 	}
 	conn.hello = true
 	conn.extended = extended
@@ -287,7 +302,7 @@ func (conn *Conn) helo(hostname string, extended bool) (bool, error) {
 			capabilities = append(capabilities, "STARTTLS")
 		}
 	}
-	return conn.send(false, smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), capabilities...)
+	conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), capabilities...)
 }
 
 func (conn *Conn) hostnameChecks(hostname string) bool {
@@ -325,45 +340,47 @@ func (conn *Conn) ipIsLocal() bool {
 	return true
 }
 
-func (conn *Conn) noop(params string) (bool, error) {
+func (conn *Conn) noop(params string) {
 	if strings.EqualFold(params, Healthcheck) {
 		conn.check = true
 	}
-	return conn.send(false, smtp.STATUSOK, "ok")
+	conn.send(smtp.STATUSOK, "ok")
 }
 
-func (conn *Conn) rset() (bool, error) {
+func (conn *Conn) rset() {
 	log.Debugf("%s: reseting status", conn.showClient())
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
-	return conn.send(true, smtp.STATUSOK, "ok")
+	conn.send(smtp.STATUSOK, "ok")
 }
 
-func (conn *Conn) starttls() (bool, error) {
+func (conn *Conn) starttls() {
 	tlsConn, ok := conn.conn.(*tls.Conn)
 	if ok {
-		return conn.send(false, smtp.STATUSNOTLS, "connection already tls")
+		log.Warnf("%s: connection already tls", conn.showClient())
+		conn.send(smtp.STATUSNOTLS, "connection already tls")
+		return
 	}
 	if conn.tlsConfig == nil {
-		return conn.send(false, smtp.STATUSNOTLS, "tls not supported")
+		log.Errorf("%s: starttls and no tls configuration", conn.showClient())
+		conn.send(smtp.STATUSNOTLS, "tls not supported")
+		return
 	}
 	log.Debugf("%s: switching to tls", conn.showClient())
 	// ready for TLS
-	_, err := conn.send(false, smtp.STATUSRDY, "ready to discuss privately")
+	conn.send(smtp.STATUSRDY, "ready to discuss privately")
+	_, err := conn.processBuffer()
 	if err != nil {
 		log.Infof("%s: could not respond to client %s", conn.showClient(), err.Error())
-		return true, err
+		return
 	}
 	tlsConn = tls.Server(conn.conn, conn.tlsConfig)
 	log.Debugf("%s: tls handshake", conn.showClient())
 	err = tlsConn.Handshake()
 	if err != nil {
-		log.Infof("%s: %s\n", conn.showClient(), err.Error())
-		return true, fmt.Errorf("cannot read")
-	}
-	if err != nil {
-		log.Infof("%s: failed to start tls connection %s", conn.showClient(), err.Error())
-		return conn.send(false, smtp.STATUSNOPOL, "tls handshake error")
+		log.Errorf("%s: failed to start tls connection %s", conn.showClient(), err.Error())
+		conn.send(smtp.STATUSNOPOL, "tls handshake error")
+		return
 	}
 	log.Debugf("%s: starttls complete (%s)", conn.showClient(), tlsinfo.TlsInfo(tlsConn))
 	// reset state
@@ -371,26 +388,28 @@ func (conn *Conn) starttls() (bool, error) {
 	conn.conn = tlsConn
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
-	return false, nil
 }
 
-func (conn *Conn) mailfrom(param string) (bool, error) {
+func (conn *Conn) mailfrom(param string) {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
-		log.Infof("%s: mail from %s not valid", conn.showClient(), ma)
-		return conn.send(true, smtp.STATUSNOPOL, fmt.Sprintf("from <%s> nok", param))
+		log.Errorf("%s: mail from %s not valid", conn.showClient(), ma)
+		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("from <%s> nok", param))
+		return
 	}
 	log.Debugf("%s: mail from %s", conn.showClient(), ma)
 	conn.mailFrom = ma
 	conn.rcptTo = make([]address.MailAddress, 0)
-	return conn.send(true, smtp.STATUSOK, fmt.Sprintf("from <%s> ok", param))
+	conn.send(smtp.STATUSOK, fmt.Sprintf("from <%s> ok", param))
+	return
 }
 
-func (conn *Conn) rcptto(param string) (bool, error) {
+func (conn *Conn) rcptto(param string) {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
-		log.Infof("%s: recipient %s not valid", conn.showClient(), ma)
-		return conn.send(true, smtp.STATUSNOPOL, fmt.Sprintf("rcpt <%s> nok", param))
+		log.Errorf("%s: recipient %s not valid", conn.showClient(), ma)
+		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("rcpt <%s> nok", param))
+		return
 	}
 	acceptedDomain := false
 	for _, domain := range conn.domains {
@@ -400,8 +419,9 @@ func (conn *Conn) rcptto(param string) (bool, error) {
 		}
 	}
 	if !acceptedDomain {
-		log.Infof("%s: recipient %s not in a valid domain", conn.showClient(), ma)
-		return conn.send(true, smtp.STATUSNOPOL, fmt.Sprintf("rcpt <%s> domain nok", param))
+		log.Errorf("%s: recipient %s not in a valid domain", conn.showClient(), ma)
+		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("rcpt <%s> domain nok", param))
+		return
 	}
 	// check if recipient already given
 	found := false
@@ -419,7 +439,7 @@ func (conn *Conn) rcptto(param string) (bool, error) {
 		addresses[i] = ma.String()
 	}
 	log.Debugf("%s: sending to %s", conn.showClient(), strings.Join(addresses, ";"))
-	return conn.send(true, smtp.STATUSOK, fmt.Sprintf("rcpt <%s> ok", param))
+	conn.send(smtp.STATUSOK, fmt.Sprintf("rcpt <%s> ok", param))
 }
 
 func (conn *Conn) getTrace() string {
@@ -456,14 +476,15 @@ func (conn *Conn) getTrace() string {
 	)
 }
 
-func (conn *Conn) data() (bool, error) {
+func (conn *Conn) data() {
 	log.Debugf("%s: recieveing data", conn.showClient())
 
 	// check if from and to ar there
 	if len(conn.rcptTo) == 0 || conn.mailFrom == nil {
 		// not ready to recieve a mail - i don't know where it goes!
-		log.Infof("%s: refusing data without 'from' and 'to'", conn.showClient())
-		return conn.send(false, smtp.STATUSBADSEC, "please tell me from/to before sending a message")
+		log.Errorf("%s: refusing data without 'from' and 'to'", conn.showClient())
+		conn.send(smtp.STATUSBADSEC, "please tell me from/to before sending a message")
+		return
 	}
 
 	// warn if sending over clear text
@@ -473,10 +494,11 @@ func (conn *Conn) data() (bool, error) {
 	}
 
 	// accept to recieve data
-	_, err := conn.send(false, smtp.STATUSACT, "shoot")
+	conn.send(smtp.STATUSACT, "send the message")
+	_, err := conn.processBuffer()
 	if err != nil {
-		log.Infof("%s: %s\n", conn.showClient(), err.Error())
-		return true, fmt.Errorf("cannot read")
+		log.Errorf("%s: %s\n", conn.showClient(), err.Error())
+		return
 	}
 
 	// start of data transmission
@@ -502,22 +524,25 @@ func (conn *Conn) data() (bool, error) {
 	accept, _ := conn.spfCheck("", 0)
 	if !accept && !msg.Signed() {
 		log.Warnf("%s: message %s is not signed and refused by SPF checks", conn.showClient(), msg.Id)
-		return conn.send(false, smtp.STATUSNOPOL, "spf failed")
+		conn.send(smtp.STATUSNOPOL, "spf failed")
+		return
 	}
 	msgID, reject, err := conn.processor.Handle(msg)
 	if err != nil {
 		log.Errorf("%s:%s: error handling message: %s", conn.showClient(), msgID, err.Error())
 		if reject {
-			return conn.send(false, smtp.STATUSNOPOL, "mail rejected")
+			conn.send(smtp.STATUSNOPOL, "mail rejected")
+			return
 		}
-		return conn.send(false, smtp.STATUSTMPER, "could not handle message")
+		conn.send(smtp.STATUSTMPER, "could not handle message")
+		return
 	}
 	log.Infof("%s: message %s recieved", conn.showClient(), msg.Id)
 	elapsed := int(endrec - startrec)
 	size := len(data)
 	speed := size * 100 / elapsed / 1024
 	speedtxt := fmt.Sprintf("%d", speed)
-	return conn.send(false, smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %d secs (%s.%s KBps)", size, elapsed, speedtxt[:len(speedtxt)-3], speedtxt[len(speedtxt)-3:]))
+	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %d secs (%s.%s KBps)", size, elapsed, speedtxt[:len(speedtxt)-3], speedtxt[len(speedtxt)-3:]))
 }
 
 func (conn *Conn) readdata() (string, error) {
@@ -549,26 +574,12 @@ func (conn *Conn) readdata() (string, error) {
 	return sb.String(), nil
 }
 
-func (conn *Conn) quit() (bool, error) {
+func (conn *Conn) quit() {
 	log.Debugf("%s: goodbye", conn.showClient())
-	return conn.send(false, smtp.STATUSBYE, "goodbye")
+	conn.send(smtp.STATUSBYE, "goodbye")
 }
 
-func (conn *Conn) request() (string, string, error) {
-	// get a buffer reader
-	reader := bufio.NewReader(conn.conn)
-	// get a text proto reader
-	tp := textproto.NewReader(reader)
-	log.Debugf("reading line")
-	command, err := tp.ReadLine()
-	log.Debugf("read line")
-	if err != nil {
-		if err == io.EOF {
-			return "", "", fmt.Errorf("connection dropped")
-		}
-		log.Infof("%s: %s\n", conn.showClient(), err.Error())
-		return "", "", fmt.Errorf("cannot read")
-	}
+func (conn *Conn) parse(command string) (string, string, error) {
 	if !IsAsciiPrintable(command) {
 		log.Infof("%s: command contains non ascii printable characters\n", conn.showClient())
 		return "", "", fmt.Errorf("command contains non ascii printable characters")
@@ -590,4 +601,48 @@ func (conn *Conn) request() (string, string, error) {
 	params := strings.TrimSpace(command[i+1:])
 	command = strings.ToUpper(strings.TrimSpace(command[:i]))
 	return command, params, nil
+}
+
+func (conn *Conn) readlines() ([]string, error) {
+	// create buffer
+	buffer := make([]byte, 1024)
+
+	// read to buffer
+	n, err := conn.conn.Read(buffer)
+
+	// check if connection dropped
+	if n == 0 {
+		return nil, fmt.Errorf("connection dropped")
+	}
+
+	// check read errors
+	if err != nil {
+		log.Infof("%s: %s\n", conn.showClient(), err.Error())
+		return nil, fmt.Errorf("cannot read")
+	}
+
+	// get text from read buffer
+	text := string(buffer[0:n])
+
+	// simplify line feeds
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+
+	// return lines
+	return strings.Split(text, "\n"), nil
+}
+
+func (conn *Conn) request() (string, string, error) {
+	// get a buffer reader
+	reader := bufio.NewReader(conn.conn)
+	// get a text proto reader
+	tp := textproto.NewReader(reader)
+	command, err := tp.ReadLine()
+	if err != nil {
+		if err == io.EOF {
+			return "", "", fmt.Errorf("connection dropped")
+		}
+		log.Infof("%s: %s\n", conn.showClient(), err.Error())
+		return "", "", fmt.Errorf("cannot read")
+	}
+	return conn.parse(command)
 }
