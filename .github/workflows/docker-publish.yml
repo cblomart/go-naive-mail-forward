@@ -59,7 +59,7 @@ jobs:
 
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    needs: buid
+    needs: build
 
     steps:
       - name: 'Login via Azure CLI'
