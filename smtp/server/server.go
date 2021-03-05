@@ -246,6 +246,7 @@ func (conn *Conn) send(status int, message string, extra ...string) {
 }
 
 func (conn *Conn) processBuffer() (bool, error) {
+	log.Debugf("%s: processing response buffer")
 	// init the globalstatus
 	globalstatus := 0
 	// send each responses
