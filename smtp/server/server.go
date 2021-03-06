@@ -197,7 +197,11 @@ func (conn *Conn) processMessages() {
 		}
 		err = conn.writeall()
 		if err != nil {
-			log.Errorf("%s: wirte error %s", conn.showClient(), err.Error())
+			if conn.close {
+				log.Debugf("%s: wrrte error %s", conn.showClient(), err.Error())
+			} else {
+				log.Errorf("%s: wrrte error %s", conn.showClient(), err.Error())
+			}
 		}
 	}
 }
@@ -281,7 +285,7 @@ func (conn *Conn) send(status int, message string, extra ...string) {
 }
 
 func (conn *Conn) ack() {
-	log.Debugf("%s: aknowledging client", conn.showClient())
+	log.Debugf("%s: acknowledging client", conn.showClient())
 	// hello client
 	conn.send(smtp.STATUSRDY, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
 	conn.acked = true
@@ -644,11 +648,11 @@ func (conn *Conn) sendmessage(msg message.Message) {
 
 	log.Infof("%s: message %s recieved", conn.showClient(), msg.Id)
 
-	elapsed := float64(conn.dataFinish-conn.dataStart) / 1000.
+	elapsed := float64(conn.dataFinish-conn.dataStart) / 1000000000.
 	size := len(msg.Data)
 	speed := float64(size) * 100 / float64(elapsed) / 1024
 
-	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %.2f secs (%.2f KBps)", size, elapsed, speed))
+	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %.3f secs (%.2f KBps)", size, elapsed, speed))
 }
 
 func (conn *Conn) readdata() (string, error) {
