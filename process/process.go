@@ -254,7 +254,7 @@ func (p *Process) addSMTP(domain string, mxs []*net.MX) int {
 		p.smtpPool = append(p.smtpPool, *client)
 		//targetSMTP = append(targetSMTP, len(p.smtpPool)-1)
 		server := strings.ToLower(strings.TrimRight(client.Relay, "."))
-		log.Infof("%04d: connected to mx %s for %s", server, client.Id, domain)
+		log.Infof("%04d: connected to mx %s for %s", client.Id, server, domain)
 		return len(p.smtpPool) - 1
 	}
 	return -1
@@ -309,6 +309,6 @@ func SendAsync(client client.SmtpClient, msg message.Message, wg *sync.WaitGroup
 		okChan <- false
 		return
 	}
-	log.Infof("%04d:%s: sent", client.Id, msg.Id, client.Relay)
+	log.Infof("%04d:%s: sent", client.Id, msg.Id)
 	okChan <- true
 }
