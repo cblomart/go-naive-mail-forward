@@ -285,10 +285,11 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 			return err
 		}
 		// send the rest further (will be splitted latter)
-		c.Bdat(data[chunksize:], true)
+		err = c.Bdat(data[chunksize:], true)
 		if err != nil {
 			return err
 		}
+		return nil
 	}
 	// send the bdat command
 	extra := ""
