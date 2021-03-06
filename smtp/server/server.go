@@ -498,7 +498,7 @@ func (conn *Conn) data() {
 	conn.send(smtp.STATUSACT, "send the message")
 
 	// start of data transmission
-	conn.dataStart = time.Now().Unix()
+	conn.dataStart = time.Now().UnixNano()
 
 	// read from input
 	data, err := conn.readdata()
@@ -514,7 +514,7 @@ func (conn *Conn) data() {
 	}
 
 	// end of data transmission
-	conn.dataFinish = time.Now().Unix()
+	conn.dataFinish = time.Now().UnixNano()
 
 	// save to storage
 	msg := message.Message{
