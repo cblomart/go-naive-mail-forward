@@ -27,6 +27,7 @@ var (
 )
 
 type SmtpClient struct {
+	Id                int
 	conn              net.Conn
 	LocalPort         string
 	Relay             string
@@ -48,7 +49,7 @@ func (c *SmtpClient) Connect() error {
 	// get local port
 	parts := strings.Split(conn.LocalAddr().String(), ":")
 	c.LocalPort = parts[len(parts)-1]
-	log.Debugf("%s:%s: connected", c.LocalPort, c.Relay)
+	log.Debugf("%04d: connected", c.Id)
 	c.conn = conn
 	// create the lock if empty as connection is established
 	if c.lock == nil {
@@ -71,7 +72,7 @@ func (c *SmtpClient) Connect() error {
 func (c *SmtpClient) Close() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	log.Infof("disconnecting from %s", c.Relay)
+	log.Infof("%04d: disconnecting", c.Id)
 	if c.conn != nil {
 		c.Connected = false
 		// #nosec G104 ignore quit
@@ -92,7 +93,7 @@ func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) (bool, error) {
 }
 
 func (c *SmtpClient) sendCmd(command string) error {
-	log.Tracef("%s:%s: > %s", c.LocalPort, c.Relay, command)
+	log.Tracef("%04d: > %s", c.Id, command)
 	_, err := fmt.Fprintf(c.conn, "%s\r\n", command)
 	return err
 }
@@ -110,17 +111,17 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		log.Tracef("%s:%s: < %s", c.LocalPort, c.Relay, line)
+		log.Tracef("%04d: < %s", c.Id, line)
 		more, err := c.checkSmtpRespCode(code, line)
 		if err != nil {
 			return "", err
 		}
 		if strings.ToUpper(line[4:]) == "STARTTLS" {
-			log.Debugf("%s:%s: tls supported", c.LocalPort, c.Relay)
+			log.Debugf("%04d: tls supported", c.Id)
 			c.TLSSupported = true
 		}
 		if strings.ToUpper(line[4:]) == "CHUNKING" {
-			log.Debugf("%s:%s: chunking supported", c.LocalPort, c.Relay)
+			log.Debugf("%04d: chunking supported", c.Id)
 			c.ChunkingSupported = true
 		}
 		if !more {
@@ -146,7 +147,7 @@ func (c *SmtpClient) StartTLS() error {
 		return err
 	}
 	// build the tls connection
-	log.Debugf("%s:%s: switching to tls", c.LocalPort, c.Relay)
+	log.Debugf("%04d: switching to tls", c.Id)
 	// #nosec G402 tls insecure configured by config
 	tlsConn := tls.Client(
 		c.conn,
@@ -156,12 +157,12 @@ func (c *SmtpClient) StartTLS() error {
 			InsecureSkipVerify: c.InsecureTLS,
 		},
 	)
-	log.Debugf("%s:%s: tls handshake", c.LocalPort, c.Relay)
+	log.Debugf("%04d: tls handshake", c.Id)
 	err = tlsConn.Handshake()
 	if err != nil {
 		return err
 	}
-	log.Debugf("%s:%s: starttls complete (%s)", c.LocalPort, c.Relay, tlsinfo.TlsInfo(tlsConn))
+	log.Debugf("%04d: starttls complete (%s)", c.Id, tlsinfo.TlsInfo(tlsConn))
 	c.conn = tlsConn
 	return nil
 }
@@ -248,7 +249,7 @@ func (c *SmtpClient) RcptTo(dest string) error {
 func (c *SmtpClient) Data(data []byte) error {
 	_, isTLS := c.conn.(*tls.Conn)
 	if !isTLS {
-		log.Warnf("%s:%s: sending message over clear text", c.LocalPort, c.Relay)
+		log.Warnf("%04d: sending message over clear text", c.Id)
 	}
 	err := c.sendCmd("DATA")
 	if err != nil {
@@ -262,13 +263,13 @@ func (c *SmtpClient) Data(data []byte) error {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()
-		log.Tracef("%s:%s: > %s", c.LocalPort, c.Relay, line)
+		log.Tracef("%04d: > %s", c.Id, line)
 		_, err := fmt.Fprintf(c.conn, "%s\r\n", line)
 		if err != nil {
 			return err
 		}
 	}
-	log.Tracef("%s:%s: > .", c.LocalPort, c.Relay)
+	log.Tracef("%04d: > .", c.Id)
 	_, err = fmt.Fprint(c.conn, ".\r\n")
 	if err != nil {
 		return err
@@ -306,7 +307,7 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 	if err != nil {
 		return err
 	}
-	log.Tracef("%s:%s: > %d byte of binary data", c.LocalPort, c.Relay, len(data))
+	log.Tracef("%04d: > %d byte of binary data", c.Id, len(data))
 	// send the data
 	_, err = bufio.NewWriter(c.conn).Write(data)
 	if err != nil {
@@ -326,49 +327,49 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 		err := c.Rset()
 		c.lock.Unlock()
 		if err != nil {
-			log.Errorf("%s:%s:%s: failed to reset: %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			log.Errorf("%04d:%s: failed to reset: %s", c.Id, msg.Id, err.Error())
 			// #nosec G104 ignore quit
 			c.Close()
 		}
 	}()
-	log.Debugf("%s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
+	log.Debugf("%04d: message %s sending", c.Id, msg.Id)
 	// sent mail from
 	err := c.MailFrom(msg.From.String())
 	if err != nil {
-		log.Errorf("%s:%s:%s: %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+		log.Errorf("%04d:%s: %s", c.Id, msg.Id, err.Error())
 		return err
 	}
 	// get recipients for domains
 	tos := msg.ToDomains(c.Domains)
 	if len(tos) == 0 {
-		log.Infof("%s:%s:%s no recipient for the message in %s", c.LocalPort, c.Relay, msg.Id, strings.Join(c.Domains, ", "))
+		log.Infof("%04d:%s no recipient for the message in %s", c.Id, msg.Id, strings.Join(c.Domains, ", "))
 		return fmt.Errorf("no recipients in domains")
 	}
 	// prepare relay for fqdn check
 	added := 0
 	for _, to := range tos {
-		log.Debugf("%s:%s:%s adding recipient %s", c.LocalPort, c.Relay, msg.Id, to)
+		log.Debugf("%04d:%s adding recipient %s", c.Id, msg.Id, to)
 		err = c.RcptTo(to)
 		if err != nil {
-			log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			log.Infof("%04d:%s %s", c.Id, msg.Id, err.Error())
 			continue
 		}
 		added++
 	}
 	if added == 0 {
-		log.Warnf("%s:%s:%s no recipient added", c.LocalPort, c.Relay, msg.Id)
+		log.Warnf("%04d:%s no recipient added", c.Id, msg.Id)
 		return fmt.Errorf("no recipients added")
 	}
 	if c.ChunkingSupported {
 		err = c.Bdat(msg.Data, true)
 		if err != nil {
-			log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			log.Infof("%04d:%s %s", c.Id, msg.Id, err.Error())
 			return err
 		}
 	} else {
 		err = c.Data(msg.Data)
 		if err != nil {
-			log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			log.Infof("%04d:%s %s", c.Id, msg.Id, err.Error())
 			return err
 		}
 
@@ -381,26 +382,26 @@ func (c *SmtpClient) StartSession() error {
 	// connect to server
 	err := c.Connect()
 	if err != nil {
-		log.Infof("could not connect to mx %s: %s", c.Relay, err.Error())
+		log.Infof("%04d: could not connect: %s", c.Id, err.Error())
 		return err
 	}
 	// present ourselves
 	err = c.Helo()
 	if err != nil {
-		log.Infof("not welcomed by mx %s: %s", c.Relay, err.Error())
+		log.Infof("%04d: not welcomed: %s", c.Id, err.Error())
 		return err
 	}
 	// handle tls
 	if c.TLSSupported {
 		err = c.StartTLS()
 		if err != nil {
-			log.Infof("tls fail for mx %s: %s", c.Relay, err.Error())
+			log.Infof("%04d: tls fail: %s", c.Id, err.Error())
 			return err
 		}
 		// re hello
 		err = c.Helo()
 		if err != nil {
-			log.Infof("not welcomed by mx %s: %s", c.Relay, err.Error())
+			log.Infof("%04d: not welcomed: %s", c.Id, err.Error())
 			return err
 		}
 	}

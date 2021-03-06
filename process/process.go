@@ -85,12 +85,12 @@ func (p *Process) cleanPool(lock bool) bool {
 	toRemove := []int{}
 	for i := range p.smtpPool {
 		if !p.smtpPool[i].Connected {
-			log.Debugf("removing disconnected mx %s", p.smtpPool[i].Relay)
+			log.Debugf("%04d: removing disconnected mx", p.smtpPool[i].Id)
 			toRemove = append(toRemove, i)
 			continue
 		}
 		if p.smtpPool[i].LastSent.Before(minLastSent) {
-			log.Debugf("removing timedout mx %s (%s)", p.smtpPool[i].Relay, time.Since(p.smtpPool[i].LastSent).String())
+			log.Debugf("%04d: removing timedout mx (%s)", p.smtpPool[i].Id, time.Since(p.smtpPool[i].LastSent).String())
 			toRemove = append(toRemove, i)
 		}
 	}
@@ -129,11 +129,14 @@ func (p *Process) reportPool(lock bool) {
 		return
 	}
 	for _, client := range p.smtpPool {
+		server := strings.ToLower(strings.TrimRight(client.Relay, "."))
+		domains := strings.Join(client.Domains, ",")
+		since := time.Since(client.LastSent).String()
 		if !lock {
-			log.Infof("smtp connection (server/domains/lastsent): %s/%s/%s", client.Relay, strings.Join(client.Domains, ","), time.Since(client.LastSent).String())
+			log.Infof("%04d: smtp connection (server/domains/lastsent): %s/%s/%s", client.Id, server, domains, since)
 			continue
 		}
-		log.Debugf("smtp connection (server/domains/lastsent): %s/%s/%s", client.Relay, strings.Join(client.Domains, ","), time.Since(client.LastSent).String())
+		log.Debugf("%04d: smtp connection (server/domains/lastsent): %s/%s/%s", client.Id, server, domains, since)
 	}
 }
 
@@ -233,6 +236,7 @@ func (p *Process) addSMTP(domain string, mxs []*net.MX) int {
 	for _, mx := range mxs {
 		// create smtp client
 		client := &client.SmtpClient{
+			Id:          len(p.smtpPool) - 1,
 			Relay:       mx.Host,
 			Domains:     []string{domain},
 			Hostname:    p.Hostname,
@@ -241,13 +245,14 @@ func (p *Process) addSMTP(domain string, mxs []*net.MX) int {
 		}
 		err := client.StartSession()
 		if err != nil {
-			log.Errorf("could not start session with mx %s for %s", mx.Host, domain)
+			log.Errorf("%04d: could not start session for %s", client.Id, domain)
 			continue
 		}
 		// add client to the pool
 		p.smtpPool = append(p.smtpPool, *client)
 		//targetSMTP = append(targetSMTP, len(p.smtpPool)-1)
-		log.Infof("connected to mx %s for %s", mx.Host, domain)
+		server := strings.ToLower(strings.TrimRight(client.Relay, "."))
+		log.Infof("%04d: connected to mx %s for %s", server, client.Id, domain)
 		return len(p.smtpPool) - 1
 	}
 	return -1
@@ -289,7 +294,7 @@ func (p *Process) findOrConnectSMTP(domains []string) []int {
 			targetSMTP = append(targetSMTP, i)
 			break
 		}
-		log.Infof("could find or connect to any mx for %s", domain)
+		log.Infof("couldn't find or connect to any mx for %s", domain)
 	}
 	return targetSMTP
 }
@@ -298,10 +303,10 @@ func SendAsync(client client.SmtpClient, msg message.Message, wg *sync.WaitGroup
 	defer wg.Done()
 	err := client.SendMessage(msg)
 	if err != nil {
-		log.Infof("%s: could not send via %s: %s", msg.Id, client.Relay, err.Error())
+		log.Infof("%04d:%s: could not send: %s", client.Id, msg.Id, err.Error())
 		okChan <- false
 		return
 	}
-	log.Infof("%s: sent via %s", msg.Id, client.Relay)
+	log.Infof("%04d:%s: sent", client.Id, msg.Id, client.Relay)
 	okChan <- true
 }
