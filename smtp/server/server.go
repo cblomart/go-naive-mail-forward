@@ -642,11 +642,11 @@ func (conn *Conn) sendmessage(msg message.Message) {
 
 	log.Infof("%s: message %s recieved", conn.showClient(), msg.Id)
 
-	elapsed := int(conn.dataFinish - conn.dataStart)
+	elapsed := float64(conn.dataFinish-conn.dataStart) / 1000.
 	size := len(msg.Data)
-	speed := float64(size) * 1000 * 100 / float64(elapsed) / 1024
+	speed := float64(size) * 100 / float64(elapsed) / 1024
 
-	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %d secs (%.2f KBps)", size, elapsed, speed))
+	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %.2f secs (%.2f KBps)", size, elapsed, speed))
 }
 
 func (conn *Conn) readdata() (string, error) {

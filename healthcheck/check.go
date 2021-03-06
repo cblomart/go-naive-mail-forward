@@ -33,6 +33,16 @@ func Check() int {
 		log.Errorf("unexpected noop response (%d): %s", code, err.Error())
 		return 1
 	}
-	log.Infof("response: %s (%d)", message, code)
+	log.Infof("noop response: %s (%d)", message, code)
+	err = conn.Writer.PrintfLine("QUIT")
+	if err != nil {
+		log.Errorf("error sending quit: %s", err.Error())
+		return 1
+	}
+	code, message, err = conn.ReadCodeLine(2)
+	if err != nil {
+		log.Errorf("unexpected quit response (%d): %s", code, err.Error())
+		return 1
+	}
 	return 0
 }
