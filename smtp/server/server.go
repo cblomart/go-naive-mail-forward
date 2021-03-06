@@ -10,6 +10,7 @@ import (
 	"cblomart/go-naive-mail-forward/utils"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/textproto"
 	"regexp"
@@ -91,7 +92,7 @@ func (r *Response) Lines() []string {
 // HandleSMTPConn handles a smtp connection
 func HandleSMTPConn(conn *net.TCPConn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
 	smtpConn := GetSMTPConn(conn, serverName, processor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
-	log.Debugf("%s: new connection", smtpConn.showClient())
+	log.Debugf("%s: new connection from %s", smtpConn.showClient(), conn.RemoteAddr().String())
 	defer smtpConn.Close()
 	log.Debugf("%s: starting processing commands", smtpConn.showClient())
 	smtpConn.processMessages()
@@ -201,6 +202,10 @@ func (conn *Conn) processMessages() {
 	// start the command response session
 	for !conn.close {
 		err := conn.read()
+		if err == io.EOF {
+			log.Debugf("%s: read error %s", conn.showClient(), err.Error())
+			break
+		}
 		if err != nil {
 			log.Errorf("%s: read error %s", conn.showClient(), err.Error())
 			break
@@ -400,9 +405,14 @@ func (conn *Conn) starttls() {
 	log.Debugf("%s: switching to tls", conn.showClient())
 	// ready for TLS
 	conn.send(smtp.STATUSRDY, "ready to discuss privately")
+	err := conn.writeall()
+	if err != nil {
+		log.Errorf("%s: failed to ack starttls %s", conn.showClient(), err.Error())
+		return
+	}
 	tlsConn := tls.Server(conn.conn, conn.tlsConfig)
 	log.Debugf("%s: tls handshake", conn.showClient())
-	err := tlsConn.Handshake()
+	err = tlsConn.Handshake()
 	if err != nil {
 		log.Errorf("%s: failed to start tls connection %s", conn.showClient(), err.Error())
 		conn.send(smtp.STATUSNOPOL, "tls handshake error")
