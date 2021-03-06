@@ -280,9 +280,15 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 	// dividing large message
 	if len(data) > chunksize {
 		// send the first part limited to chunk size
-		c.Bdat(data[:chunksize], false)
+		err := c.Bdat(data[:chunksize], false)
+		if err != nil {
+			return err
+		}
 		// send the rest further (will be splitted latter)
 		c.Bdat(data[chunksize:], true)
+		if err != nil {
+			return err
+		}
 	}
 	// send the bdat command
 	extra := ""
