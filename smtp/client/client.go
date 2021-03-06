@@ -294,7 +294,7 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 	if err != nil {
 		return err
 	}
-	log.Tracef("%s:%s: > %d byte of binary data", len(data), c.LocalPort, c.Relay)
+	log.Tracef("%s:%s: > %d byte of binary data", c.LocalPort, c.Relay, len(data))
 	// send the data
 	_, err = bufio.NewWriter(c.conn).Write(data)
 	if err != nil {
