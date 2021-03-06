@@ -21,3 +21,6 @@
 
 # linux binary
 go-naive-mail-forward
+
+# debug things
+__*
