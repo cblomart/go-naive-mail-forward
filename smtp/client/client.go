@@ -194,19 +194,16 @@ func (c *SmtpClient) Helo() error {
 
 func (c *SmtpClient) Noop() error {
 	c.lock.Lock()
-	defer func() {
-		c.lock.Unlock()
-		// #nosec G104 ignore quit
-		c.Close()
-	}()
+	defer c.lock.Unlock()
 	err := c.sendCmd("NOOP")
 	if err != nil {
 		return err
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
+		c.Connected = false
 		// #nosec G104 ignore quit
-		c.Close()
+		c.Quit()
 		return err
 	}
 	return nil
