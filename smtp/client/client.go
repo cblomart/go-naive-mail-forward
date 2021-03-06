@@ -116,9 +116,11 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 			return "", err
 		}
 		if strings.ToUpper(line[4:]) == "STARTTLS" {
+			log.Infof("%s:%s: tls supported")
 			c.TLSSupported = true
 		}
 		if strings.ToUpper(line[4:]) == "CHUNKING" {
+			log.Infof("%s:%s: chunking supported")
 			c.ChunkingSupported = true
 		}
 		if !more {
@@ -141,8 +143,6 @@ func (c *SmtpClient) StartTLS() error {
 	}
 	_, err = c.readLine(smtp.STATUSRDY)
 	if err != nil {
-		// #nosec G104 ignore quit
-		c.Quit()
 		return err
 	}
 	// build the tls connection
@@ -194,7 +194,10 @@ func (c *SmtpClient) Helo() error {
 
 func (c *SmtpClient) Noop() error {
 	c.lock.Lock()
-	defer c.lock.Unlock()
+	defer func() {
+		c.lock.Unlock()
+		c.Close()
+	}
 	err := c.sendCmd("NOOP")
 	if err != nil {
 		return err
@@ -202,7 +205,19 @@ func (c *SmtpClient) Noop() error {
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
 		// #nosec G104 ignore quit
-		c.Quit()
+		c.Close()
+		return err
+	}
+	return nil
+}
+
+func (c *SmtpClient) Rset() error {
+	err := c.sendCmd("RSET")
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSOK)
+	if err != nil {
 		return err
 	}
 	return nil
@@ -215,8 +230,6 @@ func (c *SmtpClient) MailFrom(dest string) error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
-		// #nosec G104 ignore quit
-		c.Quit()
 		return err
 	}
 	return nil
@@ -229,8 +242,6 @@ func (c *SmtpClient) RcptTo(dest string) error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
-		// #nosec G104 ignore quit
-		c.Quit()
 		return err
 	}
 	return nil
@@ -247,8 +258,6 @@ func (c *SmtpClient) Data(data []byte) error {
 	}
 	_, err = c.readLine(smtp.STATUSACT)
 	if err != nil {
-		// #nosec G104 ignore quit
-		c.Quit()
 		return err
 	}
 	// sending data
@@ -268,8 +277,6 @@ func (c *SmtpClient) Data(data []byte) error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
-		// #nosec G104 ignore quit
-		c.Quit()
 		return err
 	}
 	return nil
@@ -309,8 +316,6 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
-		// #nosec G104 ignore quit
-		c.Quit()
 		return err
 	}
 	return nil
@@ -318,7 +323,16 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 
 func (c *SmtpClient) SendMessage(msg message.Message) error {
 	c.lock.Lock()
-	defer c.lock.Unlock()
+	defer func() {
+		failed := false
+		// send reset
+		err := c.Rset()
+		c.lock.Unlock()
+		if err != nil {
+			log.Errorf("%s:%s:%s: failed to reset: %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			c.Close()
+		}
+	}
 	log.Debugf("%s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
 	// sent mail from
 	err := c.MailFrom(msg.From.String())
@@ -333,6 +347,7 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 		return fmt.Errorf("no recipients in domains")
 	}
 	// prepare relay for fqdn check
+	added := 0
 	for _, to := range tos {
 		log.Debugf("%s:%s:%s adding recipient %s", c.LocalPort, c.Relay, msg.Id, to)
 		err = c.RcptTo(to)
@@ -340,6 +355,11 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 			log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
 			continue
 		}
+		added++
+	}
+	if added == 0 {
+		log.Warnf("%s:%s:%s no recipient added", c.LocalPort, c.Relay, msg.Id)
+		return fmt.Errorf("no recipients added")
 	}
 	if c.ChunkingSupported {
 		err = c.Bdat(msg.Data, true)
