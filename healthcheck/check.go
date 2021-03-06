@@ -39,7 +39,7 @@ func Check() int {
 		log.Errorf("error sending quit: %s", err.Error())
 		return 1
 	}
-	code, message, err = conn.ReadCodeLine(2)
+	code, _, err = conn.ReadCodeLine(2)
 	if err != nil {
 		log.Errorf("unexpected quit response (%d): %s", code, err.Error())
 		return 1
