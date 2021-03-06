@@ -116,11 +116,11 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 			return "", err
 		}
 		if strings.ToUpper(line[4:]) == "STARTTLS" {
-			log.Infof("%s:%s: tls supported", c.LocalPort, c.Relay)
+			log.Debugf("%s:%s: tls supported", c.LocalPort, c.Relay)
 			c.TLSSupported = true
 		}
 		if strings.ToUpper(line[4:]) == "CHUNKING" {
-			log.Infof("%s:%s: chunking supported", c.LocalPort, c.Relay)
+			log.Debugf("%s:%s: chunking supported", c.LocalPort, c.Relay)
 			c.ChunkingSupported = true
 		}
 		if !more {
