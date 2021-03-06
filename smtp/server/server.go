@@ -300,6 +300,7 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	log.Debugf("%s: checking hostname: %s", conn.showClient(), hostname)
 	if !conn.hostnameChecks(hostname) {
 		conn.send(smtp.STATUSNOACK, "malformed hostname")
+		conn.close = true
 		return
 	}
 	log.Debugf("%s: checking if legit localhost: %s", conn.showClient(), hostname)
@@ -307,6 +308,7 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	if strings.EqualFold(hostname, Localhost) && !conn.ipIsLocal() {
 		log.Warnf("%s: localhost but not local ip: '%s'\n", conn.showClient(), hostname)
 		conn.send(smtp.STATUSNOACK, "invalid localhost handshake")
+		conn.close = true
 		return
 	}
 	log.Debugf("%s: checking RBL: %s", conn.showClient(), hostname)
@@ -314,6 +316,7 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	if conn.checkRBL(hostname) {
 		log.Warnf("%s: known bad actor: '%s'\n", conn.showClient(), hostname)
 		conn.send(smtp.STATUSNOACK, "flagged in reverse black list")
+		conn.close = true
 		return
 	}
 	conn.hello = true
@@ -577,6 +580,7 @@ func (conn *Conn) binarydata(params string) {
 		if n != datalen {
 			log.Errorf("%s: unexpected size %d bytes", conn.showClient(), n)
 			conn.send(smtp.STATUSTMPER, "unexpected size")
+			conn.close = true
 			return
 		}
 		// append to data buffer
@@ -631,6 +635,7 @@ func (conn *Conn) sendmessage(msg message.Message) {
 	if !accept && !msg.Signed() {
 		log.Warnf("%s: message %s is not signed and refused by SPF checks", conn.showClient(), msg.Id)
 		conn.send(smtp.STATUSNOPOL, "spf failed")
+		conn.close = true
 		return
 	}
 
