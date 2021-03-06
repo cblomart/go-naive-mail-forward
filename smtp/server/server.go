@@ -21,7 +21,9 @@ import (
 
 	log "cblomart/go-naive-mail-forward/logger"
 
-	"github.com/google/uuid"
+	//"github.com/google/uuid"
+
+	"github.com/lithammer/shortuuid"
 )
 
 const (
@@ -525,7 +527,8 @@ func (conn *Conn) data() {
 
 	// save to storage
 	msg := message.Message{
-		Id:   uuid.NewString(),
+		//Id:   uuid.NewString(),
+		Id:   shortuuid.New(),
 		From: conn.mailFrom,
 		To:   conn.rcptTo,
 		Data: []byte(data),
@@ -597,7 +600,8 @@ func (conn *Conn) binarydata(params string) {
 
 	// save to storage
 	msg := message.Message{
-		Id:   uuid.NewString(),
+		//Id:   uuid.NewString(),
+		Id:   shortuuid.New(),
 		From: conn.mailFrom,
 		To:   conn.rcptTo,
 		Data: conn.dataBuffer,

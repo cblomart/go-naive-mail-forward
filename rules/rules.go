@@ -9,7 +9,8 @@ import (
 
 	log "cblomart/go-naive-mail-forward/logger"
 
-	"github.com/google/uuid"
+	//"github.com/google/uuid"
+	"github.com/lithammer/shortuuid"
 )
 
 type Rules []Rule
@@ -72,7 +73,8 @@ func (rs *Rules) Evaluate(mas []address.MailAddress) []address.MailAddress {
 
 func (rs *Rules) UpdateMessage(msg *message.Message) {
 	if len(msg.Id) == 0 {
-		msg.Id = uuid.NewString()
+		//msg.Id = uuid.NewString()
+		msg.Id = shortuuid.New()
 	}
 	// updating to from rules
 	rcptTo := make([]string, len(msg.To))

@@ -14,7 +14,8 @@ import (
 
 	log "cblomart/go-naive-mail-forward/logger"
 
-	"github.com/google/uuid"
+	//"github.com/google/uuid"
+	"github.com/lithammer/shortuuid"
 )
 
 const (
@@ -144,7 +145,8 @@ func (p *Process) reportPool(lock bool) {
 func (p *Process) Handle(msg message.Message) (string, bool, error) {
 	// id the message
 	if len(msg.Id) == 0 {
-		msg.Id = uuid.NewString()
+		//msg.Id = uuid.NewString()
+		msg.Id = shortuuid.New()
 	}
 
 	// update recipients following rules
