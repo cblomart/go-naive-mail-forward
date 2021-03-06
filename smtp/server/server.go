@@ -644,10 +644,9 @@ func (conn *Conn) sendmessage(msg message.Message) {
 
 	elapsed := int(conn.dataFinish - conn.dataStart)
 	size := len(msg.Data)
-	speed := size * 100 / elapsed / 1024
-	speedtxt := fmt.Sprintf("%d", speed)
+	speed := float64(size) * 1000 * 100 / float64(elapsed) / 1024
 
-	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %d secs (%s.%s KBps)", size, elapsed, speedtxt[:len(speedtxt)-3], speedtxt[len(speedtxt)-3:]))
+	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %d secs (%.2f KBps)", size, elapsed, speed))
 }
 
 func (conn *Conn) readdata() (string, error) {
