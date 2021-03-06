@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"bytes"
 	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/smtp"
 	"cblomart/go-naive-mail-forward/tlsinfo"
@@ -227,9 +228,9 @@ func (c *SmtpClient) RcptTo(dest string) error {
 	return nil
 }
 
-func (c *SmtpClient) Data(data string) error {
-	_, isTls := c.conn.(*tls.Conn)
-	if !isTls {
+func (c *SmtpClient) Data(data []byte) error {
+	_, isTLS := c.conn.(*tls.Conn)
+	if !isTLS {
 		log.Warnf("%s:%s: sending message over clear text", c.LocalPort, c.Relay)
 	}
 	err := c.sendCmd("DATA")
@@ -243,7 +244,7 @@ func (c *SmtpClient) Data(data string) error {
 		return err
 	}
 	// sending data
-	scanner := bufio.NewScanner(strings.NewReader(data))
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()
 		log.Tracef("%s:%s: > %s", c.LocalPort, c.Relay, line)

@@ -2,6 +2,7 @@ package message
 
 import (
 	"bufio"
+	"bytes"
 	"cblomart/go-naive-mail-forward/address"
 	"strings"
 )
@@ -10,7 +11,7 @@ type Message struct {
 	Id   string
 	From *address.MailAddress
 	To   []address.MailAddress
-	Data string
+	Data []byte
 }
 
 func (m *Message) Domains() []string {
@@ -54,7 +55,7 @@ func (m *Message) ToDomains(domains []string) []string {
 }
 
 func (m *Message) Signed() bool {
-	scanner := bufio.NewScanner(strings.NewReader(m.Data))
+	scanner := bufio.NewScanner(bytes.NewReader(m.Data))
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "DKIM-Signature:") {

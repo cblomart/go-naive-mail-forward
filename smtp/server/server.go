@@ -521,7 +521,7 @@ func (conn *Conn) data() {
 		Id:   uuid.NewString(),
 		From: conn.mailFrom,
 		To:   conn.rcptTo,
-		Data: data,
+		Data: []byte(data),
 	}
 
 	conn.sendmessage(msg)
@@ -592,7 +592,7 @@ func (conn *Conn) binarydata(params string) {
 		Id:   uuid.NewString(),
 		From: conn.mailFrom,
 		To:   conn.rcptTo,
-		Data: string(conn.dataBuffer),
+		Data: conn.dataBuffer,
 	}
 
 	// clear databuffer
