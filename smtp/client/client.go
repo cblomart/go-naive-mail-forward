@@ -17,22 +17,27 @@ import (
 	log "cblomart/go-naive-mail-forward/logger"
 )
 
+const (
+	chunksize = 512 * 1024 // 512kb chunk size
+)
+
 var (
 	Trace = false
 	Debug = false
 )
 
 type SmtpClient struct {
-	conn         net.Conn
-	LocalPort    string
-	Relay        string
-	Domains      []string
-	Hostname     string
-	lock         *sync.Mutex
-	Connected    bool
-	LastSent     time.Time
-	TlsSupported bool
-	InsecureTLS  bool
+	conn              net.Conn
+	LocalPort         string
+	Relay             string
+	Domains           []string
+	Hostname          string
+	lock              *sync.Mutex
+	Connected         bool
+	LastSent          time.Time
+	TLSSupported      bool
+	ChunkingSupported bool
+	InsecureTLS       bool
 }
 
 func (c *SmtpClient) Connect() error {
@@ -111,7 +116,10 @@ func (c *SmtpClient) readLine(code int) (string, error) {
 			return "", err
 		}
 		if strings.ToUpper(line[4:]) == "STARTTLS" {
-			c.TlsSupported = true
+			c.TLSSupported = true
+		}
+		if strings.ToUpper(line[4:]) == "CHUNKING" {
+			c.ChunkingSupported = true
 		}
 		if !more {
 			break
@@ -267,6 +275,40 @@ func (c *SmtpClient) Data(data []byte) error {
 	return nil
 }
 
+// Bdat sends binary data
+func (c *SmtpClient) Bdat(data []byte, last bool) error {
+	// dividing large message
+	if len(data) > chunksize {
+		// send the first part limited to chunk size
+		c.Bdat(data[:chunksize], false)
+		// send the rest further (will be splitted latter)
+		c.Bdat(data[chunksize:], true)
+	}
+	// send the bdat command
+	extra := ""
+	if last {
+		extra = " LAST"
+	}
+	// send the bdat command
+	err := c.sendCmd(fmt.Sprintf("BDAT %d%s", len(data), extra))
+	if err != nil {
+		return err
+	}
+	log.Tracef("%s:%s: > %d byte of binary data", len(data), c.LocalPort, c.Relay)
+	// send the data
+	_, err = bufio.NewWriter(c.conn).Write(data)
+	if err != nil {
+		return err
+	}
+	_, err = c.readLine(smtp.STATUSOK)
+	if err != nil {
+		// #nosec G104 ignore quit
+		c.Quit()
+		return err
+	}
+	return nil
+}
+
 func (c *SmtpClient) SendMessage(msg message.Message) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -292,10 +334,19 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 			continue
 		}
 	}
-	err = c.Data(msg.Data)
-	if err != nil {
-		log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
-		return err
+	if c.ChunkingSupported {
+		err = c.Bdat(msg.Data, true)
+		if err != nil {
+			log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			return err
+		}
+	} else {
+		err = c.Data(msg.Data)
+		if err != nil {
+			log.Infof("%s:%s:%s %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			return err
+		}
+
 	}
 	c.LastSent = time.Now()
 	return nil
@@ -315,7 +366,7 @@ func (c *SmtpClient) StartSession() error {
 		return err
 	}
 	// handle tls
-	if c.TlsSupported {
+	if c.TLSSupported {
 		err = c.StartTLS()
 		if err != nil {
 			log.Infof("tls fail for mx %s: %s", c.Relay, err.Error())
