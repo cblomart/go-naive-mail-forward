@@ -196,6 +196,7 @@ func (c *SmtpClient) Noop() error {
 	c.lock.Lock()
 	defer func() {
 		c.lock.Unlock()
+		// #nosec G104 ignore quit
 		c.Close()
 	}()
 	err := c.sendCmd("NOOP")
@@ -329,6 +330,7 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 		c.lock.Unlock()
 		if err != nil {
 			log.Errorf("%s:%s:%s: failed to reset: %s", c.LocalPort, c.Relay, msg.Id, err.Error())
+			// #nosec G104 ignore quit
 			c.Close()
 		}
 	}()
