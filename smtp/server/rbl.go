@@ -53,10 +53,7 @@ func CheckRBLIPAsync(ip net.IP, rbls []string, res *bool, wg *sync.WaitGroup) {
 	}
 }
 func CheckRBLAddr(addr net.Addr, rbls []string) bool {
-	tcp, ok := addr.(*net.TCPAddr)
-	if !ok {
-		return true
-	}
+	tcp := addr.(*net.TCPAddr)
 	return CheckRBLIP(tcp.IP, rbls)
 }
 

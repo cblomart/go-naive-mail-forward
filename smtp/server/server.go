@@ -10,7 +10,6 @@ import (
 	"cblomart/go-naive-mail-forward/utils"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"net"
 	"net/textproto"
 	"regexp"
@@ -35,6 +34,7 @@ var (
 	Debug        = false
 	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
 	BdataParams  = regexp.MustCompile(`(?i)^[0-9]+( +LAST)?$`)
+	whitespace   = regexp.MustCompile(`\s+`)
 	clientId     = 0
 	clientIdLock = sync.RWMutex{}
 	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
@@ -45,7 +45,11 @@ var (
 type Conn struct {
 	id             int
 	conn           net.Conn
+	connLock       sync.Mutex
+	respLock       sync.Mutex
+	acked          bool
 	hello          bool
+	close          bool
 	extended       bool
 	clientName     string
 	ServerName     string
@@ -57,9 +61,8 @@ type Conn struct {
 	dnsbl          []string
 	check          bool
 	nospf          bool
-	sendBuffer     []Response
-	recieveBuffer  []byte
-	recieveBufferN int
+	responseBuffer []*Response
+	commandBuffer  string
 	dataBuffer     []byte
 	dataStart      int64
 	dataFinish     int64
@@ -71,17 +74,32 @@ type Response struct {
 	Extra   []string
 }
 
+// String show the response on one string
 func (r *Response) String() string {
 	return fmt.Sprintf("%d %s (+%s)", r.Code, r.Message, strings.Join(r.Extra, ","))
 }
 
-func HandleSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
-	smtpConn := NewSmtpConn(conn, serverName, processor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
-	defer smtpConn.Close()
-	smtpConn.ProcessMessages()
+// Lines returns the lines to send back to the client
+func (r *Response) Lines() []string {
+	lines := make([]string, len(r.Extra)+1)
+	for i, e := range r.Extra {
+		lines[i] = fmt.Sprintf("%d-%s\r\n", r.Code, e)
+	}
+	lines[len(lines)-1] = fmt.Sprintf("%d %s\r\n", r.Code, r.Message)
+	return lines
 }
 
-func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) *Conn {
+// HandleSMTPConn handles a smtp connection
+func HandleSMTPConn(conn *net.TCPConn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
+	smtpConn := GetSMTPConn(conn, serverName, processor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
+	log.Debugf("%s: new connection", smtpConn.showClient())
+	defer smtpConn.Close()
+	log.Debugf("%s: starting processing commands", smtpConn.showClient())
+	smtpConn.processMessages()
+}
+
+// GetSMTPConn updates to connection to a smtp connection
+func GetSMTPConn(conn *net.TCPConn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) *Conn {
 	// set tls config
 	var tlsConfig *tls.Config
 	certificate, err := tls.LoadX509KeyPair(certfile, keyfile)
@@ -99,24 +117,27 @@ func NewSmtpConn(conn net.Conn, serverName string, processor *process.Process, d
 	defer clientIdLock.Unlock()
 	id := clientId + 1
 	clientId++
-	return &Conn{
-		id:            id,
-		conn:          conn,
-		hello:         false,
-		clientName:    "",
-		ServerName:    serverName,
-		mailFrom:      nil,
-		rcptTo:        make([]address.MailAddress, 0),
-		processor:     processor,
-		domains:       domains,
-		tlsConfig:     tlsConfig,
-		dnsbl:         strings.Split(dnsbl, ","),
-		nospf:         nospf,
-		recieveBuffer: make([]byte, 1024),
-		dataBuffer:    []byte{},
+	smtpConn := Conn{
+		id:             id,
+		conn:           conn,
+		acked:          false,
+		hello:          false,
+		clientName:     "",
+		ServerName:     serverName,
+		mailFrom:       nil,
+		rcptTo:         make([]address.MailAddress, 0),
+		processor:      processor,
+		domains:        domains,
+		tlsConfig:      tlsConfig,
+		dnsbl:          strings.Split(dnsbl, ","),
+		nospf:          nospf,
+		responseBuffer: []*Response{},
+		dataBuffer:     []byte{},
 	}
+	return &smtpConn
 }
 
+// Close the smtp server connection
 func (conn *Conn) Close() error {
 	clientIdLock.Lock()
 	defer clientIdLock.Unlock()
@@ -124,43 +145,75 @@ func (conn *Conn) Close() error {
 	return conn.conn.Close()
 }
 
-func (conn *Conn) ProcessMessages() {
-	log.Debugf("%s: new connection from %s\n", conn.showClient(), conn.conn.RemoteAddr().String())
+func (conn *Conn) writeall() error {
+	// lock responses
+	conn.respLock.Lock()
+	defer conn.respLock.Unlock()
+	// lock connection
+	conn.connLock.Lock()
+	defer conn.connLock.Unlock()
+	// write all responses from response buffer
+	for _, r := range conn.responseBuffer {
+		for _, line := range r.Lines() {
+			log.Tracef("%s: > %s", conn.showClient(), line)
+			_, err := conn.conn.Write([]byte(line))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	conn.responseBuffer = []*Response{}
+	return nil
+}
+
+func (conn *Conn) read() error {
+	// lock connection
+	conn.connLock.Lock()
+	defer conn.connLock.Unlock()
+	buffer := make([]byte, 1024)
+	n, err := conn.conn.Read(buffer)
+	if err != nil {
+		return err
+	}
+	conn.commandBuffer += string(buffer[:n])
+	for {
+		i := strings.Index(conn.commandBuffer, "\n")
+		if i < 0 {
+			break
+		}
+		line := whitespace.ReplaceAllString(conn.commandBuffer[:i], " ")
+		line = strings.TrimSpace(line)
+		conn.commandBuffer = conn.commandBuffer[i+1:]
+		log.Tracef("%s: < %s", conn.showClient(), line)
+		if conn.processLine(line) {
+			break
+		}
+	}
+	return nil
+}
+
+func (conn *Conn) processMessages() {
 	// acknowlege the new comer
 	conn.ack()
-	_, err := conn.processBuffer()
+	err := conn.writeall()
 	if err != nil {
-		log.Errorf("%s: %s\n", conn.showClient(), err.Error())
-		return
+		log.Errorf("%s: write error %s", conn.showClient(), err.Error())
 	}
 	// start the command response session
-	for {
-		// read lines from input
-		lines, err := conn.readlines()
+	for !conn.close {
+		err := conn.read()
 		if err != nil {
-			// log connection drops as debug
-			if err != io.EOF {
-				log.Errorf("%s: %s\n", conn.showClient(), err.Error())
-			} else {
-				log.Debugf("%s: %s\n", conn.showClient(), err.Error())
-			}
+			log.Errorf("%s: read error %s", conn.showClient(), err.Error())
 			break
 		}
-		stop := false
-		l := len(lines) - 1
-		for i, line := range lines {
-			stop = conn.processLine(line, i == l)
-			if stop {
-				break
-			}
-		}
-		if stop {
-			break
+		err = conn.writeall()
+		if err != nil {
+			log.Errorf("%s: wirte error %s", conn.showClient(), err.Error())
 		}
 	}
 }
 
-func (conn *Conn) processLine(line string, last bool) bool {
+func (conn *Conn) processLine(line string) bool {
 	// get command and params
 	cmd, params, err := conn.parse(line)
 	if err != nil {
@@ -174,12 +227,8 @@ func (conn *Conn) processLine(line string, last bool) bool {
 		return true
 	}
 	conn.execCommand(cmd, params)
-	if utils.ContainsString(noPipeline, cmd) >= 0 || last {
-		quit, err := conn.processBuffer()
-		if err != nil {
-			log.Errorf("%s: %s\n", conn.showClient(), err.Error())
-		}
-		return quit
+	if cmd == "QUIT" {
+		return true
 	}
 	return false
 }
@@ -235,6 +284,8 @@ func (conn *Conn) showClient() string {
 }
 
 func (conn *Conn) send(status int, message string, extra ...string) {
+	conn.respLock.Lock()
+	defer conn.respLock.Unlock()
 	// create new response object
 	resp := Response{
 		Code:    status,
@@ -242,48 +293,14 @@ func (conn *Conn) send(status int, message string, extra ...string) {
 		Extra:   extra,
 	}
 	// add it to the buffer
-	conn.sendBuffer = append(conn.sendBuffer, resp)
-}
-
-func (conn *Conn) processBuffer() (bool, error) {
-	log.Debugf("%s: processing response buffer")
-	// init the globalstatus
-	globalstatus := 0
-	// send each responses
-	for _, r := range conn.sendBuffer {
-		// send extra answers
-		if len(r.Extra) > 0 {
-			for _, e := range r.Extra {
-				log.Tracef("%s > %d-%s\n", conn.showClient(), r.Code, e)
-				_, err := fmt.Fprintf(conn.conn, "%d-%s\r\n", r.Code, e)
-				if err != nil {
-					return true, err
-				}
-			}
-		}
-		// tarce message
-		log.Tracef("%s > %d %s\n", conn.showClient(), r.Code, r.Message)
-		// check status
-		if globalstatus < r.Code {
-			globalstatus = r.Code
-		}
-		_, err := fmt.Fprintf(conn.conn, "%d %s\r\n", r.Code, r.Message)
-		if err != nil {
-			return true, err
-		}
-	}
-	// reset send buffer
-	conn.sendBuffer = []Response{}
-	// check if should quit
-	quit := globalstatus > smtp.STATUSERROR || globalstatus == smtp.STATUSBYE
-	return quit, nil
+	conn.responseBuffer = append(conn.responseBuffer, &resp)
 }
 
 func (conn *Conn) ack() {
-	// be sure the send buffer is empty
-	conn.sendBuffer = []Response{}
+	log.Debugf("%s: aknowledging client", conn.showClient())
 	// hello client
 	conn.send(smtp.STATUSRDY, fmt.Sprintf("%s Go Naive Mail Forwarder", conn.ServerName))
+	conn.acked = true
 }
 
 func (conn *Conn) unknown(command string) {
@@ -350,11 +367,7 @@ func (conn *Conn) hostnameChecks(hostname string) bool {
 }
 
 func (conn *Conn) ipIsLocal() bool {
-	tcpconn, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
-	if !ok {
-		log.Debugf("%s: localhost connection not on tcp\n", conn.showClient())
-		return false
-	}
+	tcpconn := conn.conn.RemoteAddr().(*net.TCPAddr)
 	if !tcpconn.IP.IsLoopback() {
 		log.Debugf("%s: localhost connection not on loopback\n", conn.showClient())
 		return false
@@ -391,14 +404,9 @@ func (conn *Conn) starttls() {
 	log.Debugf("%s: switching to tls", conn.showClient())
 	// ready for TLS
 	conn.send(smtp.STATUSRDY, "ready to discuss privately")
-	_, err := conn.processBuffer()
-	if err != nil {
-		log.Infof("%s: could not respond to client %s", conn.showClient(), err.Error())
-		return
-	}
 	tlsConn := tls.Server(conn.conn, conn.tlsConfig)
 	log.Debugf("%s: tls handshake", conn.showClient())
-	err = tlsConn.Handshake()
+	err := tlsConn.Handshake()
 	if err != nil {
 		log.Errorf("%s: failed to start tls connection %s", conn.showClient(), err.Error())
 		conn.send(smtp.STATUSNOPOL, "tls handshake error")
@@ -466,17 +474,13 @@ func (conn *Conn) rcptto(param string) {
 func (conn *Conn) getTrace() string {
 	// get information on the remove address
 	remoteaddr := conn.clientName
-	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
-	if ok {
-		remoteaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
-	}
+	tcpaddr := conn.conn.RemoteAddr().(*net.TCPAddr)
+	remoteaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 
 	// get information on the remte address
 	localaddr := conn.ServerName
-	tcpaddr, ok = conn.conn.LocalAddr().(*net.TCPAddr)
-	if ok {
-		localaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
-	}
+	tcpaddr = conn.conn.LocalAddr().(*net.TCPAddr)
+	localaddr += fmt.Sprintf(" (%s)", tcpaddr.IP.String())
 
 	// get information on TLS encryption
 	tlsinfos := ""
@@ -503,13 +507,6 @@ func (conn *Conn) data() {
 
 	// accept to recieve data
 	conn.send(smtp.STATUSACT, "send the message")
-
-	// process send buffer (pipelining)
-	_, err := conn.processBuffer()
-	if err != nil {
-		log.Errorf("%s: %s\n", conn.showClient(), err.Error())
-		return
-	}
 
 	// start of data transmission
 	conn.dataStart = time.Now().Unix()
@@ -696,11 +693,13 @@ func (conn *Conn) readdata() (string, error) {
 func (conn *Conn) quit() {
 	log.Debugf("%s: goodbye", conn.showClient())
 	conn.send(smtp.STATUSBYE, "goodbye")
+	conn.close = true
 }
 
 func (conn *Conn) parse(command string) (string, string, error) {
-	log.Tracef("%s < %s\n", conn.showClient(), command)
 	if !IsAsciiPrintable(command) {
+		conn.send(smtp.STATUSBYE, "unacceptable characters")
+		conn.close = true
 		return "", "", fmt.Errorf("command contains non ascii printable characters")
 	}
 	if len(command) < 4 {
@@ -719,63 +718,4 @@ func (conn *Conn) parse(command string) (string, string, error) {
 	params := strings.TrimSpace(command[i+1:])
 	command = strings.ToUpper(strings.TrimSpace(command[:i]))
 	return command, params, nil
-}
-
-func (conn *Conn) readlines() ([]string, error) {
-	defer conn.conn.SetReadDeadline(time.Time{})
-	// make the buffer of line read
-	lines := []string{}
-
-	// read byte per byte
-	for {
-		// set the time out for this byte read
-		// #nosec G104
-		conn.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
-
-		// buffer for byte to read
-		b := make([]byte, 1)
-
-		// read from connection
-		n, err := conn.conn.Read(b)
-
-		if err == io.EOF {
-			if len(lines) > 0 {
-				return lines, nil
-			}
-			return nil, err
-		}
-
-		if n == 0 {
-			if len(lines) > 0 {
-				return lines, nil
-			}
-			continue
-		}
-
-		// add the line if recieve new line
-		if b[0] == '\n' {
-			lines = append(lines, string(conn.recieveBuffer[:conn.recieveBufferN]))
-			conn.recieveBufferN = 0
-			continue
-		}
-
-		// ignore line feeds
-		if b[0] == '\r' {
-			continue
-		}
-
-		// replace tab by space
-		if b[0] == '\t' {
-			b[0] = ' '
-		}
-
-		// send an error if character is not ascii
-		if !IsAscii(b[0]) {
-			return nil, fmt.Errorf("recievied non ascii input '%d'", b[0])
-		}
-
-		// add the read character to the buffer
-		conn.recieveBuffer[conn.recieveBufferN] = b[0]
-		conn.recieveBufferN++
-	}
 }

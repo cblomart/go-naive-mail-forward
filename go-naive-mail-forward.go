@@ -103,8 +103,9 @@ func main() {
 			log.Fatalf(err.Error())
 		}
 	}
+
 	// listen to port 25 (smtp)
-	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	listen, err := net.ListenTCP("tcp", &net.TCPAddr{Port: port})
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
@@ -119,11 +120,11 @@ func main() {
 	//handle connections
 	log.Infof("listening on %s:%d and waiting for connections\n", servername, port)
 	for {
-		conn, err := listen.Accept()
+		conn, err := listen.AcceptTCP()
 		if err != nil {
 			log.Fatalf(err.Error())
 		}
-		go server.HandleSmtpConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
+		go server.HandleSMTPConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
 	}
 }
 

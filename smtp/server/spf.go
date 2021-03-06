@@ -25,11 +25,7 @@ func (conn *Conn) spfCheck(domain string, lookups int) (bool, int) {
 	}
 
 	// smtp should be contacted via TCP - get the IP
-	tcpaddr, ok := conn.conn.RemoteAddr().(*net.TCPAddr)
-	if !ok {
-		log.Errorf("%s: connection is not a TCP connection", conn.showClient())
-		return true, lookups
-	}
+	tcpaddr := conn.conn.RemoteAddr().(*net.TCPAddr)
 	ip := tcpaddr.IP
 
 	// fetch the SPF records
