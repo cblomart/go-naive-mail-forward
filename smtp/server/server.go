@@ -552,7 +552,9 @@ func (conn *Conn) binarydata(params string) {
 	log.Debugf("%s: expected %d bytes (last:%v)", conn.showClient(), datalen, last)
 
 	// binary data recieves directly
-	conn.dataStart = time.Now().Unix()
+	if conn.dataStart == 0 {
+		conn.dataStart = time.Now().UnixNano()
+	}
 
 	if datalen > 0 {
 		// declare a buffer of the right length
@@ -583,7 +585,7 @@ func (conn *Conn) binarydata(params string) {
 		return
 	}
 
-	conn.dataFinish = time.Now().Unix()
+	conn.dataFinish = time.Now().UnixNano()
 
 	// save to storage
 	msg := message.Message{
