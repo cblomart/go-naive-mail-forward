@@ -50,7 +50,7 @@ jobs:
           context: ./
           file: ./Dockerfile
           push: true
-          tags: ${{ github.repository }}:latest,${{ github.repository }}:${GITHUB_SHA::8}
+          tags: ${{ github.repository }}:latest,${{ github.repository }}:${{GITHUB_SHA::8}}
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
@@ -73,7 +73,7 @@ jobs:
           resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
           name: go-naive-mail-forward
           dns-name-label: gomxzerottl
-          image: ${{ github.repository }}:${GITHUB_SHA::8}
+          image: ${{ github.repository }}:${{GITHUB_SHA::8}}
           environment-variables: FORWARDER_RULES="@tst.zerottl.cc:cblomart@microsoft.com" FORWARDER_SERVERNAME="mx.zerottl.cc" FORWARDER_NOSPF="true"
           ip-address: Public
           ports: 25
