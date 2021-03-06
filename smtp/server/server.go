@@ -45,8 +45,6 @@ var (
 type Conn struct {
 	id             int
 	conn           net.Conn
-	connLock       sync.Mutex
-	respLock       sync.Mutex
 	acked          bool
 	hello          bool
 	close          bool
@@ -113,8 +111,6 @@ func GetSMTPConn(conn *net.TCPConn, serverName string, processor *process.Proces
 			InsecureSkipVerify: insecuretls,
 		}
 	}
-	clientIdLock.Lock()
-	defer clientIdLock.Unlock()
 	id := clientId + 1
 	clientId++
 	smtpConn := Conn{
@@ -139,19 +135,11 @@ func GetSMTPConn(conn *net.TCPConn, serverName string, processor *process.Proces
 
 // Close the smtp server connection
 func (conn *Conn) Close() error {
-	clientIdLock.Lock()
-	defer clientIdLock.Unlock()
 	clientId--
 	return conn.conn.Close()
 }
 
 func (conn *Conn) writeall() error {
-	// lock responses
-	conn.respLock.Lock()
-	defer conn.respLock.Unlock()
-	// lock connection
-	conn.connLock.Lock()
-	defer conn.connLock.Unlock()
 	// write all responses from response buffer
 	for _, r := range conn.responseBuffer {
 		for _, line := range r.Lines() {
@@ -167,9 +155,6 @@ func (conn *Conn) writeall() error {
 }
 
 func (conn *Conn) read() error {
-	// lock connection
-	conn.connLock.Lock()
-	defer conn.connLock.Unlock()
 	buffer := make([]byte, 1024)
 	n, err := conn.conn.Read(buffer)
 	if err != nil {
@@ -285,8 +270,6 @@ func (conn *Conn) showClient() string {
 }
 
 func (conn *Conn) send(status int, message string, extra ...string) {
-	conn.respLock.Lock()
-	defer conn.respLock.Unlock()
 	// create new response object
 	resp := Response{
 		Code:    status,
