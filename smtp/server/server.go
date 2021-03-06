@@ -38,7 +38,6 @@ var (
 	clientId     = 0
 	clientIdLock = sync.RWMutex{}
 	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
-	noPipeline   = []string{"EHLO", "HELO", "QUIT", "STARTTLS", "NOOP", "DATA", "BDAT", "DEBUG", "TRACE"}
 )
 
 //Conn is a smtp client connection
@@ -227,10 +226,7 @@ func (conn *Conn) processLine(line string) bool {
 		return true
 	}
 	conn.execCommand(cmd, params)
-	if cmd == "QUIT" {
-		return true
-	}
-	return false
+	return cmd == "QUIT"
 }
 
 //gocyclo complains because of cases
