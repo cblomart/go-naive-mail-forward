@@ -24,10 +24,15 @@ jobs:
 
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    env:
+      SHORTSHA: ${GITHUB_SHA::8}
 
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v2
+
+      - name: Set env
+        run: echo "GITHUB_SHA_SHORT=$(echo $GITHUB_SHA | cut -c 1-6)" >> $GITHUB_ENV
       
       - name: Docker Layer Caching
         uses: satackey/action-docker-layer-caching@v0.0.11
@@ -50,7 +55,7 @@ jobs:
           context: ./
           file: ./Dockerfile
           push: true
-          tags: ${{ github.repository }}:latest,${{ github.repository }}:${{GITHUB_SHA::8}}
+          tags: ${{ github.repository }}:latest,${{ github.repository }}:${{ env.SHORTSHA }}
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
@@ -60,6 +65,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     needs: build
+    env:
+      SHORTSHA: ${GITHUB_SHA::8}
 
     steps:
       - name: 'Login via Azure CLI'
@@ -73,7 +80,7 @@ jobs:
           resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
           name: go-naive-mail-forward
           dns-name-label: gomxzerottl
-          image: ${{ github.repository }}:${{GITHUB_SHA::8}}
+          image: ${{ github.repository }}:${{ env.SHORTSHA }}
           environment-variables: FORWARDER_RULES="@tst.zerottl.cc:cblomart@microsoft.com" FORWARDER_SERVERNAME="mx.zerottl.cc" FORWARDER_NOSPF="true"
           ip-address: Public
           ports: 25
