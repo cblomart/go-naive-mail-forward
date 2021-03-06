@@ -197,7 +197,7 @@ func (c *SmtpClient) Noop() error {
 	defer func() {
 		c.lock.Unlock()
 		c.Close()
-	}
+	}()
 	err := c.sendCmd("NOOP")
 	if err != nil {
 		return err
@@ -324,7 +324,6 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 func (c *SmtpClient) SendMessage(msg message.Message) error {
 	c.lock.Lock()
 	defer func() {
-		failed := false
 		// send reset
 		err := c.Rset()
 		c.lock.Unlock()
@@ -332,7 +331,7 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 			log.Errorf("%s:%s:%s: failed to reset: %s", c.LocalPort, c.Relay, msg.Id, err.Error())
 			c.Close()
 		}
-	}
+	}()
 	log.Debugf("%s:%s: message %s sending", c.LocalPort, c.Relay, msg.Id)
 	// sent mail from
 	err := c.MailFrom(msg.From.String())
