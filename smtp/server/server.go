@@ -337,16 +337,11 @@ func (conn *Conn) helo(hostname string, extended bool) {
 		if !istls && conn.tlsConfig != nil {
 			capabilities = append(capabilities, "STARTTLS")
 		}
-		ignorebdat := false
-		for _, domain := range noBdatDomains {
-			if strings.HasSuffix(conn.clientName, domain) {
-				ignorebdat = true
-				log.Warnf("%s: chunking ignored for %s", conn.showClient(), domain)
-				break
-			}
-		}
-		if !ignorebdat {
+		domains := strings.Split(conn.clientName, ".")
+		genericdomain := strings.Join(domains[len(domains)-2:], ".")
+		if utils.ContainsString(noBdatDomains, genericdomain) < 0 {
 			capabilities = append(capabilities, "CHUNKING")
+
 		}
 	}
 	conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), capabilities...)
