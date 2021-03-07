@@ -704,7 +704,7 @@ func (conn *Conn) readdata() error {
 	log.Debugf("%s: trace: %s", conn.showClient(), trace)
 	conn.dataBuffer.WriteString(trace)
 	conn.dataBuffer.WriteString("\r\n")
-	log.Debugf("%s: readling lines")
+	log.Debugf("%s: readling lines", conn.showClient())
 	for {
 		line, err := tp.ReadLine()
 		if err != nil {
