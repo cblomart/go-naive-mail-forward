@@ -34,14 +34,15 @@ const (
 )
 
 var (
-	Trace        = false
-	Debug        = false
-	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
-	BdataParams  = regexp.MustCompile(`(?i)^[0-9]+( +LAST)?$`)
-	whitespace   = regexp.MustCompile(`\s+`)
-	clientId     = 0
-	clientIdLock = sync.RWMutex{}
-	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
+	Trace         = false
+	Debug         = false
+	DomainMatch   = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
+	BdataParams   = regexp.MustCompile(`(?i)^[0-9]+( +LAST)?$`)
+	whitespace    = regexp.MustCompile(`\s+`)
+	clientId      = 0
+	clientIdLock  = sync.RWMutex{}
+	needHelo      = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
+	noBdatDomains = []string{}
 )
 
 //Conn is a smtp client connection
@@ -300,6 +301,7 @@ func (conn *Conn) unknown(command string) {
 }
 
 func (conn *Conn) helo(hostname string, extended bool) {
+	hostname = strings.ToLower(strings.TrimRight(hostname, "."))
 	log.Debugf("%s: checking hostname: %s", conn.showClient(), hostname)
 	if !conn.hostnameChecks(hostname) {
 		conn.send(smtp.STATUSNOACK, "malformed hostname")
@@ -331,9 +333,20 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	_, istls := conn.conn.(*tls.Conn)
 	capabilities := []string{}
 	if extended {
-		capabilities = append(capabilities, "PIPELINING", "8BITMIME", "CHUNKING")
+		capabilities = append(capabilities, "PIPELINING", "8BITMIME")
 		if !istls && conn.tlsConfig != nil {
 			capabilities = append(capabilities, "STARTTLS")
+		}
+		ignorebdat := false
+		for _, domain := range noBdatDomains {
+			if strings.HasSuffix(conn.clientName, domain) {
+				ignorebdat = true
+				log.Warnf("%s: chunking ignored for %s", conn.showClient(), domain)
+				break
+			}
+		}
+		if !ignorebdat {
+			capabilities = append(capabilities, "CHUNKING")
 		}
 	}
 	conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), capabilities...)
@@ -580,39 +593,14 @@ func (conn *Conn) binarydata(params string) {
 	if datalen > 0 {
 
 		unread := conn.dataBuffer.Len()
-		var added int64 = 0
 
-		// give it 1 minut to read
-		// #nosec G104
-		//conn.conn.SetReadDeadline(time.Now().Add(time.Minute))
-
-		for added < datalen {
-			// copy the data to the data buffer
-			n, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
-			added += n
-			log.Infof("%s: recieved %d bytes, total %d/%d bytes", conn.showClient(), n, added, datalen)
-			if err == io.EOF {
-				log.Warnf("%s: got eof while reading bdat, retrying.", conn.showClient())
-				continue
-			}
-			if err != nil {
-				log.Errorf("%s: issue while reading: %s", conn.showClient(), err.Error())
-				conn.send(smtp.STATUSTMPER, "issue while reading")
-				conn.dataBuffer.Truncate(unread)
-				return
-			}
-		}
-
-		// reset read deadline
-		// #nosec G104
-		//conn.conn.SetReadDeadline(time.Time{})
-
-		// check if we have enough
-		if added != datalen {
-			log.Errorf("%s: unexpected size %d bytes", conn.showClient(), added)
-			conn.send(smtp.STATUSTMPER, "unexpected size")
+		// copy the data to the data buffer
+		_, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
+		if err != nil {
+			log.Errorf("%s: issue while reading: %s", conn.showClient(), err.Error())
+			disablebdat(conn.clientName)
+			conn.send(smtp.STATUSFAIL, "issue while reading binary data")
 			conn.dataBuffer.Truncate(unread)
-			conn.close = true
 			return
 		}
 	}
@@ -639,6 +627,13 @@ func (conn *Conn) binarydata(params string) {
 
 	// send the message
 	conn.sendmessage(msg)
+}
+
+func disablebdat(server string) {
+	domains := strings.Split(server, ".")
+	genericdomain := strings.Join(domains[len(domains)-2:], ".")
+	log.Warnf("disabling binary data for: %s", genericdomain)
+	noBdatDomains = append(noBdatDomains, genericdomain)
 }
 
 func (conn *Conn) checkdata() {
