@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"cblomart/go-naive-mail-forward/address"
 	"cblomart/go-naive-mail-forward/message"
 	"cblomart/go-naive-mail-forward/process"
@@ -63,7 +64,7 @@ type Conn struct {
 	nospf          bool
 	responseBuffer []*Response
 	commandBuffer  string
-	dataBuffer     []byte
+	dataBuffer     *bytes.Buffer
 	dataStart      int64
 	dataFinish     int64
 }
@@ -130,7 +131,7 @@ func GetSMTPConn(conn *net.TCPConn, serverName string, processor *process.Proces
 		dnsbl:          strings.Split(dnsbl, ","),
 		nospf:          nospf,
 		responseBuffer: []*Response{},
-		dataBuffer:     []byte{},
+		dataBuffer:     &bytes.Buffer{},
 	}
 	return &smtpConn
 }
@@ -550,7 +551,7 @@ func (conn *Conn) binarydata(params string) {
 
 	// parse parameters
 	parts := strings.Split(params, " ")
-	datalen, err := strconv.Atoi(parts[0])
+	datalen, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
 		log.Errorf("%s: invalid length", conn.showClient())
 		conn.send(smtp.STATUSERROR, "invalid length")
@@ -567,27 +568,27 @@ func (conn *Conn) binarydata(params string) {
 	}
 
 	if datalen > 0 {
-		// declare a buffer of the right length
-		buffer := make([]byte, datalen)
 
-		// read the data
-		n, err := io.ReadFull(conn.conn, buffer)
+		unread := conn.dataBuffer.Len()
+
+		// copy the data to the data buffer
+		n, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
 		if err != nil {
 			log.Errorf("%s: issue while reading", conn.showClient())
 			conn.send(smtp.STATUSTMPER, "issue while reading")
+			conn.dataBuffer.Truncate(unread)
 			return
 		}
-		log.Infof("%s: recieved %d bytes", conn.showClient(), len(buffer))
+		log.Infof("%s: recieved %d bytes", conn.showClient(), n)
 
 		// check if we have enough
 		if n != datalen {
 			log.Errorf("%s: unexpected size %d bytes", conn.showClient(), n)
 			conn.send(smtp.STATUSTMPER, "unexpected size")
+			conn.dataBuffer.Truncate(unread)
 			conn.close = true
 			return
 		}
-		// append to data buffer
-		conn.dataBuffer = append(conn.dataBuffer, buffer...)
 	}
 
 	// if not the last chunk continue as usual
@@ -604,11 +605,11 @@ func (conn *Conn) binarydata(params string) {
 		Id:   shortuuid.New(),
 		From: conn.mailFrom,
 		To:   conn.rcptTo,
-		Data: conn.dataBuffer,
+		Data: conn.dataBuffer.Bytes(),
 	}
 
 	// clear databuffer
-	conn.dataBuffer = []byte{}
+	conn.dataBuffer.Reset()
 
 	// send the message
 	conn.sendmessage(msg)
