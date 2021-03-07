@@ -320,7 +320,14 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 	return nil
 }
 
+// SendMessage sends a message via the smtp server
 func (c *SmtpClient) SendMessage(msg message.Message) error {
+	if !c.Connected {
+		err := c.Connect()
+		if err != nil {
+			return err
+		}
+	}
 	c.lock.Lock()
 	defer func() {
 		// send reset
