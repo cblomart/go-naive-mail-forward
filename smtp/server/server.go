@@ -583,6 +583,7 @@ func (conn *Conn) binarydata(params string) {
 		var added int64 = 0
 
 		// give it 1 minut to read
+		// #nosec G104
 		conn.conn.SetReadDeadline(time.Now().Add(time.Minute))
 
 		for added < datalen {
@@ -603,6 +604,7 @@ func (conn *Conn) binarydata(params string) {
 		}
 
 		// reset read deadline
+		// #nosec G104
 		conn.conn.SetReadDeadline(time.Time{})
 
 		// check if we have enough
