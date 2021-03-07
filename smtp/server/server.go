@@ -325,6 +325,7 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	conn.hello = true
 	conn.extended = extended
 	conn.clientName = hostname
+	conn.dataBuffer.Reset()
 	log.Debugf("%s: welcoming name: '%s'\n", conn.showClient(), hostname)
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
@@ -380,6 +381,7 @@ func (conn *Conn) rset() {
 	log.Debugf("%s: reseting status", conn.showClient())
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
+	conn.dataBuffer.Reset()
 	conn.send(smtp.STATUSOK, "ok")
 }
 
@@ -417,6 +419,7 @@ func (conn *Conn) starttls() {
 	conn.conn = tlsConn
 	conn.mailFrom = nil
 	conn.rcptTo = make([]address.MailAddress, 0)
+	conn.dataBuffer.Reset()
 }
 
 func (conn *Conn) mailfrom(param string) {
@@ -507,17 +510,20 @@ func (conn *Conn) data() {
 	// accept to recieve data
 	conn.send(smtp.STATUSACT, "send the message")
 
+	// reset the data buffer
+	conn.dataBuffer.Reset()
+
 	// start of data transmission
 	conn.dataStart = time.Now().UnixNano()
 
 	// read from input
-	data, err := conn.readdata()
+	err := conn.readdata()
 	if err != nil {
 		log.Infof("%s: %s\n", conn.showClient(), err.Error())
 	}
 
 	// if empty body return
-	if len(data) == 0 {
+	if conn.dataBuffer.Len() == 0 {
 		log.Warnf("%s: message empty", conn.showClient())
 		conn.send(smtp.STATUSFAIL, "empty message")
 		return
@@ -532,9 +538,13 @@ func (conn *Conn) data() {
 		Id:   shortuuid.New(),
 		From: conn.mailFrom,
 		To:   conn.rcptTo,
-		Data: []byte(data),
+		Data: conn.dataBuffer.Bytes(),
 	}
 
+	// clear databuffer
+	conn.dataBuffer.Reset()
+
+	// send the message
 	conn.sendmessage(msg)
 }
 
@@ -664,33 +674,32 @@ func (conn *Conn) sendmessage(msg message.Message) {
 	conn.send(smtp.STATUSOK, fmt.Sprintf("recieved %d bytes in %.3f secs (%.2f KBps)", size, elapsed, speed))
 }
 
-func (conn *Conn) readdata() (string, error) {
+func (conn *Conn) readdata() error {
 	// get a buffer reader
 	reader := bufio.NewReader(conn.conn)
 
 	// get a text proto reader
 	tp := textproto.NewReader(reader)
 
-	var sb strings.Builder
 	// get trace information
 	trace := conn.getTrace()
 	log.Debugf("%s: trace: %s", conn.showClient(), trace)
-	sb.WriteString(trace)
-	sb.WriteString("\r\n")
+	conn.dataBuffer.WriteString(trace)
+	conn.dataBuffer.WriteString("\r\n")
 	for {
 		line, err := tp.ReadLine()
 		if err != nil {
 			log.Infof("%s: %s\n", conn.showClient(), err.Error())
-			return "", fmt.Errorf("cannot read")
+			return fmt.Errorf("cannot read")
 		}
 		log.Tracef("%s < %s\n", conn.showClient(), line)
 		if line == "." {
 			break
 		}
-		sb.WriteString(line)
-		sb.WriteString("\r\n")
+		conn.dataBuffer.WriteString(line)
+		conn.dataBuffer.WriteString("\r\n")
 	}
-	return sb.String(), nil
+	return nil
 }
 
 func (conn *Conn) quit() {
