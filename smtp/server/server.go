@@ -42,7 +42,7 @@ var (
 	clientId      = 0
 	clientIdLock  = sync.RWMutex{}
 	needHelo      = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
-	noBdatDomains = []string{}
+	noBdatDomains = []string{"google.com"}
 )
 
 //Conn is a smtp client connection
@@ -577,6 +577,18 @@ func (conn *Conn) binarydata(params string) {
 	}
 	last := len(parts) == 2
 
+	// check if buffer has already be filled and add trace
+	if conn.dataBuffer.Len() == 0 {
+		trace := conn.getTrace()
+		log.Debugf("%s: trace: %s", conn.showClient(), trace)
+		_, err := conn.dataBuffer.WriteString(fmt.Sprintf("%s\r\n", trace))
+		if err != nil {
+			log.Errorf("%s: cannot initialize message buffer", conn.showClient())
+			conn.send(smtp.STATUSERROR, "cannot initialize message buffer")
+			return
+		}
+	}
+
 	// info
 	log.Debugf("%s: expected %d bytes (last:%v)", conn.showClient(), datalen, last)
 
@@ -589,10 +601,6 @@ func (conn *Conn) binarydata(params string) {
 
 		unread := conn.dataBuffer.Len()
 
-		// set read timeout
-		// #nosec G104 - ignore set deadline errors
-		conn.conn.SetReadDeadline(time.Now().Add(time.Minute))
-
 		// copy the data to the data buffer
 		_, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
 		if err != nil {
@@ -602,10 +610,6 @@ func (conn *Conn) binarydata(params string) {
 			conn.dataBuffer.Truncate(unread)
 			return
 		}
-
-		// reset read timeout
-		// #nosec G104 - ignore set deadline errors
-		conn.conn.SetReadDeadline(time.Time{})
 	}
 
 	// if not the last chunk continue as usual
@@ -700,6 +704,7 @@ func (conn *Conn) readdata() error {
 	log.Debugf("%s: trace: %s", conn.showClient(), trace)
 	conn.dataBuffer.WriteString(trace)
 	conn.dataBuffer.WriteString("\r\n")
+	log.Debugf("%s: readling lines")
 	for {
 		line, err := tp.ReadLine()
 		if err != nil {
