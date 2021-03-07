@@ -584,7 +584,7 @@ func (conn *Conn) binarydata(params string) {
 		// copy the data to the data buffer
 		n, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
 		if err != nil {
-			log.Errorf("%s: issue while reading", conn.showClient())
+			log.Errorf("%s: issue while reading: %s", conn.showClient(), err.Error())
 			conn.send(smtp.STATUSTMPER, "issue while reading")
 			conn.dataBuffer.Truncate(unread)
 			return
