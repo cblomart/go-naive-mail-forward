@@ -305,10 +305,10 @@ func SendAsync(client client.SmtpClient, msg message.Message, wg *sync.WaitGroup
 	defer wg.Done()
 	err := client.SendMessage(msg)
 	if err != nil {
-		log.Infof("%04d:%s: could not send: %s", client.Id, msg.Id, err.Error())
+		log.Infof("%04d: could not send %s: %s", client.Id, msg.Id, err.Error())
 		okChan <- false
 		return
 	}
-	log.Infof("%04d:%s: sent", client.Id, msg.Id)
+	log.Infof("%04d: %s sent", client.Id, msg.Id)
 	okChan <- true
 }

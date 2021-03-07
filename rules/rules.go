@@ -88,7 +88,7 @@ func (rs *Rules) UpdateMessage(msg *message.Message) {
 		rcptTo[i] = to.String()
 	}
 	updated := strings.Join(rcptTo, ";")
-	log.Infof("%s: forwarding: %s > %s", msg.Id, original, updated)
+	log.Infof("forwarding %s from %s to %s", msg.Id, original, updated)
 }
 
 type Rule struct {

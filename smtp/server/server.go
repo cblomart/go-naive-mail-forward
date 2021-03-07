@@ -571,7 +571,7 @@ func (conn *Conn) binarydata(params string) {
 		buffer := make([]byte, datalen)
 
 		// read the data
-		n, err := conn.conn.Read(buffer)
+		n, err := io.ReadFull(conn.conn, buffer)
 		if err != nil {
 			log.Errorf("%s: issue while reading", conn.showClient())
 			conn.send(smtp.STATUSTMPER, "issue while reading")
