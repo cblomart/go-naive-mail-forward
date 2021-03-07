@@ -584,7 +584,7 @@ func (conn *Conn) binarydata(params string) {
 
 		// give it 1 minut to read
 		// #nosec G104
-		conn.conn.SetReadDeadline(time.Now().Add(time.Minute))
+		conn.conn.SetReadDeadline(time.Now().Add(3 * time.Minute))
 
 		for added < datalen {
 			// copy the data to the data buffer
