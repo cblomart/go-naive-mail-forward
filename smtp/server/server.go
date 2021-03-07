@@ -518,6 +518,14 @@ func (conn *Conn) data() {
 	// accept to recieve data
 	conn.send(smtp.STATUSACT, "send the message")
 
+	// write all information to output
+	err := conn.writeall()
+	if err != nil {
+		log.Infof("%s: %s\n", conn.showClient(), err.Error())
+		conn.send(smtp.STATUSFAIL, "faile to start read")
+		return
+	}
+
 	// reset the data buffer
 	conn.dataBuffer.Reset()
 
@@ -525,7 +533,7 @@ func (conn *Conn) data() {
 	conn.dataStart = time.Now().UnixNano()
 
 	// read from input
-	err := conn.readdata()
+	err = conn.readdata()
 	if err != nil {
 		log.Infof("%s: %s\n", conn.showClient(), err.Error())
 	}
