@@ -580,19 +580,33 @@ func (conn *Conn) binarydata(params string) {
 	if datalen > 0 {
 
 		unread := conn.dataBuffer.Len()
+		var added int64 = 0
 
-		// copy the data to the data buffer
-		n, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
-		if err != nil {
-			log.Errorf("%s: issue while reading: %s", conn.showClient(), err.Error())
-			conn.send(smtp.STATUSTMPER, "issue while reading")
-			conn.dataBuffer.Truncate(unread)
-			return
+		// give it 1 minut to read
+		conn.conn.SetReadDeadline(time.Now().Add(time.Minute))
+
+		for added < datalen {
+			// copy the data to the data buffer
+			n, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
+			added += n
+			log.Infof("%s: recieved %d bytes, total %d/%d bytes", conn.showClient(), n, added, datalen)
+			if err == io.EOF {
+				log.Warnf("%s: got eof while reading bdat, retrying.", conn.showClient())
+				continue
+			}
+			if err != nil {
+				log.Errorf("%s: issue while reading: %s", conn.showClient(), err.Error())
+				conn.send(smtp.STATUSTMPER, "issue while reading")
+				conn.dataBuffer.Truncate(unread)
+				return
+			}
 		}
-		log.Infof("%s: recieved %d bytes", conn.showClient(), n)
+
+		// reset read deadline
+		conn.conn.SetReadDeadline(time.Time{})
 
 		// check if we have enough
-		if n != datalen {
+		if added != datalen {
 			log.Errorf("%s: unexpected size %d bytes", conn.showClient(), n)
 			conn.send(smtp.STATUSTMPER, "unexpected size")
 			conn.dataBuffer.Truncate(unread)
