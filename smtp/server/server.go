@@ -582,11 +582,10 @@ func (conn *Conn) binarydata(params string) {
 		unread := conn.dataBuffer.Len()
 		var added int64 = 0
 
-		// give it 1 minut to read
-		// #nosec G104
-		conn.conn.SetReadDeadline(time.Now().Add(3 * time.Minute))
-
 		for added < datalen {
+			// give it 1 minut to read
+			// #nosec G104
+			conn.conn.SetReadDeadline(time.Now().Add(time.Minute))
 			// copy the data to the data buffer
 			n, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
 			added += n
