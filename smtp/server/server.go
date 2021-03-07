@@ -589,6 +589,10 @@ func (conn *Conn) binarydata(params string) {
 
 		unread := conn.dataBuffer.Len()
 
+		// set read timeout
+		// #nosec G104 - ignore set deadline errors
+		conn.conn.SetReadDeadline(time.Now().Add(time.Minute))
+
 		// copy the data to the data buffer
 		_, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
 		if err != nil {
@@ -598,6 +602,10 @@ func (conn *Conn) binarydata(params string) {
 			conn.dataBuffer.Truncate(unread)
 			return
 		}
+
+		// reset read timeout
+		// #nosec G104 - ignore set deadline errors
+		conn.conn.SetReadDeadline(time.Time{})
 	}
 
 	// if not the last chunk continue as usual
