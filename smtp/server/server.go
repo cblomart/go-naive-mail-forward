@@ -607,7 +607,7 @@ func (conn *Conn) binarydata(params string) {
 
 		// check if we have enough
 		if added != datalen {
-			log.Errorf("%s: unexpected size %d bytes", conn.showClient(), n)
+			log.Errorf("%s: unexpected size %d bytes", conn.showClient(), added)
 			conn.send(smtp.STATUSTMPER, "unexpected size")
 			conn.dataBuffer.Truncate(unread)
 			conn.close = true
