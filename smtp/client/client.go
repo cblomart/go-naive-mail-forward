@@ -350,28 +350,28 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 	// prepare relay for fqdn check
 	added := 0
 	for _, to := range tos {
-		log.Debugf("%04d:%s adding recipient %s", c.Id, msg.Id, to)
+		log.Debugf("%04d: %s adding recipient %s", c.Id, msg.Id, to)
 		err = c.RcptTo(to)
 		if err != nil {
-			log.Infof("%04d:%s %s", c.Id, msg.Id, err.Error())
+			log.Infof("%04d: %s - %s", c.Id, msg.Id, err.Error())
 			continue
 		}
 		added++
 	}
 	if added == 0 {
-		log.Warnf("%04d:%s no recipient added", c.Id, msg.Id)
+		log.Warnf("%04d: %s no recipient added", c.Id, msg.Id)
 		return fmt.Errorf("no recipients added")
 	}
 	if c.ChunkingSupported {
 		err = c.Bdat(msg.Data, true)
 		if err != nil {
-			log.Infof("%04d:%s %s", c.Id, msg.Id, err.Error())
+			log.Infof("%04d: %s - %s", c.Id, msg.Id, err.Error())
 			return err
 		}
 	} else {
 		err = c.Data(msg.Data)
 		if err != nil {
-			log.Infof("%04d:%s %s", c.Id, msg.Id, err.Error())
+			log.Infof("%04d: %s - %s", c.Id, msg.Id, err.Error())
 			return err
 		}
 
