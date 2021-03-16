@@ -163,6 +163,9 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		log.Warnf("%s: message is not signed", msg.Id)
 	}
 
+	// be sure to clean smtp pool
+	p.cleanPool(true)
+
 	// find the relays to send to
 	targetSMTP := p.findOrConnectSMTP(msg.Domains())
 

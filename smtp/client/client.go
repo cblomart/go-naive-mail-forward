@@ -84,7 +84,8 @@ func (c *SmtpClient) Close() error {
 
 func (c *SmtpClient) checkSmtpRespCode(expcode int, line string) (bool, error) {
 	if fmt.Sprintf("%d", expcode) != line[:3] {
-		return false, fmt.Errorf("unexpexted error code returned %d", expcode)
+		log.Warnf("returned error message: %s", line[3:])
+		return false, fmt.Errorf("unexpexted error code returned %s", line[:3])
 	}
 	if line[3] == '-' {
 		return true, nil
@@ -322,19 +323,13 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 
 // SendMessage sends a message via the smtp server
 func (c *SmtpClient) SendMessage(msg message.Message) error {
-	if !c.Connected {
-		err := c.Connect()
-		if err != nil {
-			return err
-		}
-	}
 	c.lock.Lock()
 	defer func() {
 		// send reset
 		err := c.Rset()
 		c.lock.Unlock()
 		if err != nil {
-			log.Errorf("%04d:%s: failed to reset: %s", c.Id, msg.Id, err.Error())
+			log.Errorf("%04d: %s - failed to reset: %s", c.Id, msg.Id, err.Error())
 			// #nosec G104 ignore quit
 			c.Close()
 		}
@@ -343,13 +338,13 @@ func (c *SmtpClient) SendMessage(msg message.Message) error {
 	// sent mail from
 	err := c.MailFrom(msg.From.String())
 	if err != nil {
-		log.Errorf("%04d:%s: %s", c.Id, msg.Id, err.Error())
+		log.Errorf("%04d: %s - %s", c.Id, msg.Id, err.Error())
 		return err
 	}
 	// get recipients for domains
 	tos := msg.ToDomains(c.Domains)
 	if len(tos) == 0 {
-		log.Infof("%04d:%s no recipient for the message in %s", c.Id, msg.Id, strings.Join(c.Domains, ", "))
+		log.Infof("%04d: %s no recipient for the message in %s", c.Id, msg.Id, strings.Join(c.Domains, ", "))
 		return fmt.Errorf("no recipients in domains")
 	}
 	// prepare relay for fqdn check
