@@ -310,9 +310,12 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 	}
 	log.Tracef("%04d: > %d byte of binary data", c.Id, len(data))
 	// send the data
-	_, err = bufio.NewWriter(c.conn).Write(data)
+	n, err := bufio.NewWriter(c.conn).Write(data)
 	if err != nil {
 		return err
+	}
+	if n < len(data) {
+		log.Warnf("%04d: sent data inferior to buffer")
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
