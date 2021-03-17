@@ -189,13 +189,18 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 		}
 	}
 
+	// return result
+	if !result {
+		c := p.cleanPool()
+		if c {
+			p.reportPool(true)
+		}
+		return msg.Id, false, fmt.Errorf("could not send message to at least one relay")
+	}
+
 	// status on connections
 	p.reportPool(false)
 
-	// return result
-	if !result {
-		return msg.Id, false, fmt.Errorf("could not send message to at least one relay")
-	}
 	return msg.Id, false, nil
 }
 
