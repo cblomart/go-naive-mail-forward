@@ -113,7 +113,10 @@ func (p *Process) keepAlivePool() {
 	for _, client := range p.smtpPool {
 		if client.Connected {
 			// #nosec G104 ignore noop issues
-			client.Noop()
+			err := client.Noop()
+			if err != nil {
+				log.Warnf("%04d: error nooping %s", client.Id, err.Error())
+			}
 		}
 	}
 }
