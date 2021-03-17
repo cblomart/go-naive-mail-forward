@@ -315,7 +315,7 @@ func (c *SmtpClient) Bdat(data []byte, last bool) error {
 		return err
 	}
 	if n < len(data) {
-		log.Warnf("%04d: sent data inferior to buffer")
+		log.Warnf("%04d: sent data inferior to buffer", c.Id)
 	}
 	_, err = c.readLine(smtp.STATUSOK)
 	if err != nil {
