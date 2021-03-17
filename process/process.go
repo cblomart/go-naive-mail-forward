@@ -53,7 +53,7 @@ func (p *Process) ManagePools() {
 		for {
 			select {
 			case <-ticker.C:
-				go p.checkPools()
+				go p.checkPools(false, true)
 			case <-quit:
 				ticker.Stop()
 				return
@@ -62,24 +62,24 @@ func (p *Process) ManagePools() {
 	}()
 }
 
-func (p *Process) checkPools() {
-	// clean current pool
-	c1 := p.cleanPool(true)
-	// keepalive current pool
-	p.keepAlivePool()
-	// clean lingering connections that may have tripped
-	c2 := p.cleanPool(true)
-	// now we should be good
-	if c1 || c2 {
-		p.reportPool(true)
-	}
-}
-
-func (p *Process) cleanPool(lock bool) bool {
+func (p *Process) checkPools(show bool, lock bool) {
 	if lock {
 		p.poolLock.Lock()
 		defer p.poolLock.Unlock()
 	}
+	// clean current pool
+	c1 := p.cleanPool()
+	// keepalive current pool
+	p.keepAlivePool()
+	// clean lingering connections that may have tripped
+	c2 := p.cleanPool()
+	// now we should be good
+	if c1 || c2 {
+		p.reportPool(show)
+	}
+}
+
+func (p *Process) cleanPool() bool {
 	// suppose lock was already aquired
 	minLastSent := time.Now().Add(-connectionTimeout * time.Minute)
 	// clean disconnected or pools that did not send mails recently
@@ -110,8 +110,6 @@ func (p *Process) cleanPool(lock bool) bool {
 }
 
 func (p *Process) keepAlivePool() {
-	p.poolLock.RLock()
-	defer p.poolLock.RUnlock()
 	for _, client := range p.smtpPool {
 		if client.Connected {
 			// #nosec G104 ignore noop issues
@@ -120,11 +118,7 @@ func (p *Process) keepAlivePool() {
 	}
 }
 
-func (p *Process) reportPool(lock bool) {
-	if lock {
-		p.poolLock.RLock()
-		defer p.poolLock.RUnlock()
-	}
+func (p *Process) reportPool(show bool) {
 	if len(p.smtpPool) == 0 {
 		log.Debugf("no smtp connection")
 		return
@@ -133,7 +127,7 @@ func (p *Process) reportPool(lock bool) {
 		server := strings.ToLower(strings.TrimRight(client.Relay, "."))
 		domains := strings.Join(client.Domains, ",")
 		since := time.Since(client.LastSent).String()
-		if !lock {
+		if show {
 			log.Infof("%04d: smtp connection (server/domains/lastsent): %s/%s/%s", client.Id, server, domains, since)
 			continue
 		}
@@ -164,7 +158,7 @@ func (p *Process) Handle(msg message.Message) (string, bool, error) {
 	}
 
 	// be sure to clean smtp pool
-	p.cleanPool(true)
+	p.checkPools(false, false)
 
 	// find the relays to send to
 	targetSMTP := p.findOrConnectSMTP(msg.Domains())
@@ -270,7 +264,7 @@ func (p *Process) findOrConnectSMTP(domains []string) []int {
 	p.poolLock.Lock()
 	defer p.poolLock.Unlock()
 	// status on connections
-	p.reportPool(false)
+	p.reportPool(true)
 	// list the pools to run the message to
 	targetSMTP, matchedDomains := p.mapDomainToSMTP(domains)
 	sort.Sort(sort.Reverse(sort.IntSlice(matchedDomains)))
@@ -306,6 +300,11 @@ func (p *Process) findOrConnectSMTP(domains []string) []int {
 
 func SendAsync(client client.SmtpClient, msg message.Message, wg *sync.WaitGroup, okChan chan bool) {
 	defer wg.Done()
+	if !client.Connected {
+		log.Infof("%04d: not sending %s on a closed connection", client.Id, msg.Id)
+		okChan <- false
+		return
+	}
 	err := client.SendMessage(msg)
 	if err != nil {
 		log.Infof("%04d: could not send %s: %s", client.Id, msg.Id, err.Error())
