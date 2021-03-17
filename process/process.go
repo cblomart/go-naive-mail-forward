@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	keepaliveInterval = 4
-	connectionTimeout = 30
+	keepaliveInterval = 3
+	connectionTimeout = 15
 )
 
 type Process struct {

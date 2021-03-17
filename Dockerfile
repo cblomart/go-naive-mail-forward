@@ -5,13 +5,9 @@ ENV GO111MODULE=on \
 
 # install necessary tools
 RUN apt-get update &&\
-    apt-get install -y --no-install-recommends tzdata zip ca-certificates &&\
+    apt-get install -y --no-install-recommends ca-certificates &&\
     apt-get clean &&\
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# compress tzinfo
-WORKDIR /usr/share/zoneinfo
-RUN zip -q -r -0 /zoneinfo.zip .
 
 WORKDIR /build
 
@@ -49,10 +45,6 @@ RUN mkdir /data
 
 # create the minimal image
 FROM scratch
-
-# set zoneinfo
-ENV ZONEINFO /zoneinfo.zip
-COPY --from=builder /zoneinfo.zip /
 
 # set ca-certificates
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
