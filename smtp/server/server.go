@@ -600,7 +600,7 @@ func (conn *Conn) binarydata(params string) {
 	}
 
 	// create read buffer
-	buffer := make([]byte, 256)
+	buffer := make([]byte, 128)
 
 	// bytes left to read
 	toread := int(datalen)
@@ -623,7 +623,7 @@ func (conn *Conn) binarydata(params string) {
 		// trace
 		recieved := conn.dataBuffer.Len() + n
 		percentDone := float32(recieved) * 100 / float32(datalen)
-		log.Tracef("%s: < %d bytes of data %.2f%% (%d/%d)", conn.showClient(), n, percentDone, recieved, datalen)
+		log.Tracef("%s: < %d bytes of data %.2f%% - %d/%d", conn.showClient(), n, percentDone, recieved, datalen)
 
 		// add data to buffer
 		conn.dataBuffer.Write(buffer[:n])
