@@ -614,7 +614,7 @@ func (conn *Conn) binarydata(params string) {
 		return
 	}
 
-	log.Tracef("%s: < %d bytes of binary data", toread)
+	log.Tracef("%s: < %d bytes of binary data", conn.showClient(), toread)
 
 	// if not the last chunk continue as usual
 	if !last {
