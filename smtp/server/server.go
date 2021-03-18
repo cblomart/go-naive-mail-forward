@@ -63,7 +63,6 @@ type Conn struct {
 	check          bool
 	nospf          bool
 	responseBuffer []*Response
-	commandBuffer  string
 	dataBuffer     *bytes.Buffer
 	dataStart      int64
 	dataFinish     int64
@@ -163,15 +162,17 @@ func (conn *Conn) read() error {
 	if err != nil {
 		return err
 	}
-	conn.commandBuffer += string(buffer[:n])
+	conn.dataBuffer.Write(buffer[:n])
 	for {
-		i := strings.Index(conn.commandBuffer, "\n")
-		if i < 0 {
+		line, err := conn.dataBuffer.ReadString('\n')
+		if err != nil {
 			break
 		}
-		line := whitespace.ReplaceAllString(conn.commandBuffer[:i], " ")
+		if len(line) == 0 {
+			break
+		}
+		line = whitespace.ReplaceAllString(line, " ")
 		line = strings.TrimSpace(line)
-		conn.commandBuffer = conn.commandBuffer[i+1:]
 		log.Tracef("%s: < %s", conn.showClient(), line)
 		if conn.processLine(line) {
 			break
@@ -591,10 +592,6 @@ func (conn *Conn) binarydata(params string) {
 		}
 	}
 
-	if len(conn.commandBuffer) > 0 {
-		log.Warnf("%s: command buffer should be empty before bdat (%d byte)", conn.showClient(), len(conn.commandBuffer))
-	}
-
 	// info
 	log.Debugf("%s: expected %d bytes (last:%v)", conn.showClient(), datalen, last)
 
@@ -607,7 +604,7 @@ func (conn *Conn) binarydata(params string) {
 	buffer := make([]byte, 2048)
 
 	// bytes left to read
-	toread := int(datalen)
+	toread := int(datalen) - conn.dataBuffer.Len()
 
 	// set read deadline
 	// #nosec G104 ignore set deadline issues
@@ -627,13 +624,7 @@ func (conn *Conn) binarydata(params string) {
 		// trace
 		recieved := conn.dataBuffer.Len() + n
 		percentDone := float32(recieved) * 100. / float32(datalen)
-		log.Tracef("%s: < %d bytes of data %.2f%%", conn.showClient(), n, percentDone)
-
-		// show content
-		txt := strings.ReplaceAll(string(buffer[:n]), "\r\n", "\n")
-		for _, line := range strings.Split(txt, "\n") {
-			log.Tracef("%s: # %s", conn.showClient(), line)
-		}
+		log.Tracef("%s: < %d bytes of data %.2f %%", conn.showClient(), n, percentDone)
 
 		// add data to buffer
 		conn.dataBuffer.Write(buffer[:n])
