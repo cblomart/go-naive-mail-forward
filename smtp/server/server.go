@@ -557,6 +557,7 @@ func (conn *Conn) data() {
 	conn.sendmessage(msg)
 }
 
+//gocyclo:ignore
 func (conn *Conn) binarydata(params string) {
 	// check before sending
 	conn.checkdata()
