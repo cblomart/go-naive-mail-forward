@@ -627,7 +627,7 @@ func (conn *Conn) binarydata(params string) {
 		// show content
 		txt := strings.ReplaceAll(string(buffer[:n]), "\r\n", "\n")
 		for _, line := range strings.Split(txt, "\n") {
-			log.Tracef("%s: # %s", line)
+			log.Tracef("%s: # %s", conn.showClient(), line)
 		}
 
 		// add data to buffer
