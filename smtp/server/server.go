@@ -158,6 +158,7 @@ func (conn *Conn) writeall() error {
 }
 
 func (conn *Conn) read() error {
+	log.Debugf("%s: reading line", conn.showClient())
 	buffer := make([]byte, 1024)
 	n, err := conn.conn.Read(buffer)
 	if err != nil {
@@ -610,6 +611,7 @@ func (conn *Conn) binarydata(params string) {
 
 	for toread > 0 {
 
+		log.Debugf("%s: reading bdat", conn.showClient())
 		// copy the data to the data buffer
 		n, err := conn.conn.Read(buffer)
 		if err != nil {
@@ -617,6 +619,9 @@ func (conn *Conn) binarydata(params string) {
 			conn.send(smtp.STATUSFAIL, "issue while reading binary data")
 			return
 		}
+
+		// trace
+		log.Tracef("%s: < %d bytes of data", conn.showClient(), n)
 
 		// add data to buffer
 		conn.dataBuffer.Write(buffer[:n])

@@ -18,7 +18,7 @@ func TlsInfo(c *tls.Conn) string {
 	case tls.VersionTLS12:
 		tlsVer = "TLS1.2"
 	case tls.VersionTLS13:
-		tlsVer = "TSL1.3"
+		tlsVer = "TLS1.3"
 	}
 	tlsCypher := tls.CipherSuiteName(c.ConnectionState().CipherSuite)
 	return fmt.Sprintf("version=%s,cypher=%s", tlsVer, tlsCypher)
