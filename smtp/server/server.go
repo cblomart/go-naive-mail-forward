@@ -600,7 +600,7 @@ func (conn *Conn) binarydata(params string) {
 	}
 
 	// create read buffer
-	buffer := make([]byte, datalen)
+	buffer := make([]byte, 256)
 
 	// bytes left to read
 	toread := int(datalen)
