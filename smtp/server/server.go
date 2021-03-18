@@ -605,6 +605,7 @@ func (conn *Conn) binarydata(params string) {
 	toread := int(datalen)
 
 	// set read deadline
+	// #nosec G104 ignore set deadline issues
 	conn.conn.SetReadDeadline(time.Now().Add(3 * time.Minute))
 
 	for toread > 0 {
@@ -623,6 +624,7 @@ func (conn *Conn) binarydata(params string) {
 	}
 
 	// remove read deadline
+	// #nosec G104 ignore set deadline issues
 	conn.conn.SetReadDeadline(time.Time{})
 
 	// if not the last chunk continue as usual
