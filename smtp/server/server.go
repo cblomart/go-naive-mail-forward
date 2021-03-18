@@ -601,39 +601,20 @@ func (conn *Conn) binarydata(params string) {
 	}
 
 	// create read buffer
-	buffer := make([]byte, 2048)
+	//buffer := make([]byte, 2048)
 
 	// bytes left to read
 	toread := int(datalen) - conn.dataBuffer.Len()
 
-	// set read deadline
-	// #nosec G104 ignore set deadline issues
-	conn.conn.SetReadDeadline(time.Now().Add(3 * time.Minute))
-
-	for toread > 0 {
-
-		log.Debugf("%s: reading bdat", conn.showClient())
-		// copy the data to the data buffer
-		n, err := conn.conn.Read(buffer)
-		if err != nil {
-			log.Errorf("%s: issue while reading: %s", conn.showClient(), err.Error())
-			conn.send(smtp.STATUSFAIL, "issue while reading binary data")
-			return
-		}
-
-		// trace
-		recieved := conn.dataBuffer.Len() + n
-		percentDone := float32(recieved) * 100. / float32(datalen)
-		log.Tracef("%s: < %d bytes of data %.2f %%", conn.showClient(), n, percentDone)
-
-		// add data to buffer
-		conn.dataBuffer.Write(buffer[:n])
-		toread -= n
+	// copy to buffer
+	_, err = io.CopyN(conn.dataBuffer, conn.conn, int64(toread))
+	if err != nil {
+		log.Errorf("%s: issue while reading: %s", conn.showClient(), err.Error())
+		conn.send(smtp.STATUSFAIL, "issue while reading binary data")
+		return
 	}
 
-	// remove read deadline
-	// #nosec G104 ignore set deadline issues
-	conn.conn.SetReadDeadline(time.Time{})
+	log.Tracef("%s: < %d bytes of binary data", toread)
 
 	// if not the last chunk continue as usual
 	if !last {
