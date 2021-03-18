@@ -34,15 +34,14 @@ const (
 )
 
 var (
-	Trace         = false
-	Debug         = false
-	DomainMatch   = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
-	BdataParams   = regexp.MustCompile(`(?i)^[0-9]+( +LAST)?$`)
-	whitespace    = regexp.MustCompile(`\s+`)
-	clientId      = 0
-	clientIdLock  = sync.RWMutex{}
-	needHelo      = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
-	noBdatDomains = []string{"google.com"}
+	Trace        = false
+	Debug        = false
+	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
+	BdataParams  = regexp.MustCompile(`(?i)^[0-9]+( +LAST)?$`)
+	whitespace   = regexp.MustCompile(`\s+`)
+	clientId     = 0
+	clientIdLock = sync.RWMutex{}
+	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
 )
 
 //Conn is a smtp client connection
@@ -333,15 +332,9 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	_, istls := conn.conn.(*tls.Conn)
 	capabilities := []string{}
 	if extended {
-		capabilities = append(capabilities, "PIPELINING", "8BITMIME")
+		capabilities = append(capabilities, "PIPELINING", "8BITMIME", "CHUNKING")
 		if !istls && conn.tlsConfig != nil {
 			capabilities = append(capabilities, "STARTTLS")
-		}
-		domains := strings.Split(conn.clientName, ".")
-		genericdomain := strings.Join(domains[len(domains)-2:], ".")
-		if utils.ContainsString(noBdatDomains, genericdomain) < 0 {
-			capabilities = append(capabilities, "CHUNKING")
-
 		}
 	}
 	conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), capabilities...)
@@ -605,20 +598,32 @@ func (conn *Conn) binarydata(params string) {
 		conn.dataStart = time.Now().UnixNano()
 	}
 
-	if datalen > 0 {
+	// create read buffer
+	buffer := make([]byte, datalen)
 
-		unread := conn.dataBuffer.Len()
+	// bytes left to read
+	toread := int(datalen)
+
+	// set read deadline
+	conn.conn.SetReadDeadline(time.Now().Add(3 * time.Minute))
+
+	for toread > 0 {
 
 		// copy the data to the data buffer
-		_, err := io.CopyN(conn.dataBuffer, conn.conn, datalen)
+		n, err := conn.conn.Read(buffer)
 		if err != nil {
 			log.Errorf("%s: issue while reading: %s", conn.showClient(), err.Error())
-			disablebdat(conn.clientName)
 			conn.send(smtp.STATUSFAIL, "issue while reading binary data")
-			conn.dataBuffer.Truncate(unread)
 			return
 		}
+
+		// add data to buffer
+		conn.dataBuffer.Write(buffer[:n])
+		toread -= n
 	}
+
+	// remove read deadline
+	conn.conn.SetReadDeadline(time.Time{})
 
 	// if not the last chunk continue as usual
 	if !last {
@@ -642,13 +647,6 @@ func (conn *Conn) binarydata(params string) {
 
 	// send the message
 	conn.sendmessage(msg)
-}
-
-func disablebdat(server string) {
-	domains := strings.Split(server, ".")
-	genericdomain := strings.Join(domains[len(domains)-2:], ".")
-	log.Warnf("disabling binary data for: %s", genericdomain)
-	noBdatDomains = append(noBdatDomains, genericdomain)
 }
 
 func (conn *Conn) checkdata() {
