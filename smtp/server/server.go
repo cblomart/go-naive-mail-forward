@@ -624,6 +624,12 @@ func (conn *Conn) binarydata(params string) {
 		percentDone := float32(recieved) * 100. / float32(datalen)
 		log.Tracef("%s: < %d bytes of data %.2f%%", conn.showClient(), n, percentDone)
 
+		// show content
+		txt := strings.ReplaceAll(string(buffer[:n]), "\r\n", "\n")
+		for _, line := range strings.Split(txt, "\n") {
+			log.Tracef("%s: # %s", line)
+		}
+
 		// add data to buffer
 		conn.dataBuffer.Write(buffer[:n])
 		toread -= n
