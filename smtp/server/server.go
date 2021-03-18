@@ -600,8 +600,10 @@ func (conn *Conn) binarydata(params string) {
 		conn.dataStart = time.Now().UnixNano()
 	}
 
-	// create read buffer
-	//buffer := make([]byte, 2048)
+	// show data already in buffer
+	if conn.dataBuffer.Len() > 0 {
+		log.Tracef("%s: < %d bytes of binary data already in buffer", conn.showClient(), conn.dataBuffer.Len())
+	}
 
 	// bytes left to read
 	toread := int(datalen) - conn.dataBuffer.Len()
