@@ -621,7 +621,9 @@ func (conn *Conn) binarydata(params string) {
 		}
 
 		// trace
-		log.Tracef("%s: < %d bytes of data", conn.showClient(), n)
+		recieved := conn.dataBuffer.Len() + n
+		percentDone := float32(recieved) * 100 / float32(datalen)
+		log.Tracef("%s: < %d bytes of data %.2f% (%d/%d)", conn.showClient(), n, percentDone, datalen)
 
 		// add data to buffer
 		conn.dataBuffer.Write(buffer[:n])
