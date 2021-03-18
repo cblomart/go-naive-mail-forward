@@ -201,9 +201,9 @@ func (conn *Conn) processMessages() {
 		err = conn.writeall()
 		if err != nil {
 			if conn.close {
-				log.Debugf("%s: wrrte error %s", conn.showClient(), err.Error())
+				log.Debugf("%s: write error %s", conn.showClient(), err.Error())
 			} else {
-				log.Errorf("%s: wrrte error %s", conn.showClient(), err.Error())
+				log.Errorf("%s: write error %s", conn.showClient(), err.Error())
 			}
 		}
 	}
@@ -588,6 +588,10 @@ func (conn *Conn) binarydata(params string) {
 			conn.send(smtp.STATUSERROR, "cannot initialize message buffer")
 			return
 		}
+	}
+
+	if len(conn.commandBuffer) > 0 {
+		log.Warnf("%s: command buffer should be empty before bdat (%d byte)", len(conn.commandBuffer), conn.showClient())
 	}
 
 	// info
