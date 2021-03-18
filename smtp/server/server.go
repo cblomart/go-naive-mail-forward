@@ -591,7 +591,7 @@ func (conn *Conn) binarydata(params string) {
 	}
 
 	if len(conn.commandBuffer) > 0 {
-		log.Warnf("%s: command buffer should be empty before bdat (%d byte)", len(conn.commandBuffer), conn.showClient())
+		log.Warnf("%s: command buffer should be empty before bdat (%d byte)", conn.showClient(), len(conn.commandBuffer))
 	}
 
 	// info
