@@ -162,18 +162,28 @@ func (conn *Conn) read() error {
 	if err != nil {
 		return err
 	}
+	//log what was recieved
+	for _, line := range strings.Split(string(buffer[:n]), "\n") {
+		line = whitespace.ReplaceAllString(line, " ")
+		line = strings.TrimSpace(line)
+		log.Tracef("%s: < %s", conn.showClient(), line)
+	}
 	conn.dataBuffer.Write(buffer[:n])
 	for {
 		line, err := conn.dataBuffer.ReadString('\n')
-		if err != nil {
+		if err == io.EOF {
 			break
 		}
-		if len(line) == 0 {
+		if err != nil {
+			log.Warnf("%s: error reading %s", conn.showClient(), err.Error())
 			break
 		}
 		line = whitespace.ReplaceAllString(line, " ")
 		line = strings.TrimSpace(line)
-		log.Tracef("%s: < %s", conn.showClient(), line)
+		if len(line) == 0 {
+			log.Warnf("%s: recieved empty line", conn.showClient())
+			break
+		}
 		if conn.processLine(line) {
 			break
 		}
