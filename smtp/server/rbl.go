@@ -2,6 +2,7 @@ package server
 
 import (
 	log "cblomart/go-naive-mail-forward/logger"
+	"cblomart/go-naive-mail-forward/smtp/dns"
 	"fmt"
 	"net"
 	"sort"
@@ -92,7 +93,7 @@ func CheckRBLName(host string, rbls []string) bool {
 	result := false
 	var wg sync.WaitGroup
 	// try to resolve ips
-	ips, err := net.LookupIP(host)
+	ips, err := dns.LookupIP(host)
 	if err != nil || len(ips) == 0 {
 		// should be welcomed with a resolvable host
 		return true

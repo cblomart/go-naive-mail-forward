@@ -4,6 +4,7 @@ package server
 
 import (
 	log "cblomart/go-naive-mail-forward/logger"
+	"cblomart/go-naive-mail-forward/smtp/dns"
 	"cblomart/go-naive-mail-forward/utils"
 	"fmt"
 	"net"
@@ -88,7 +89,7 @@ func (conn *Conn) evalMechanisms(mechanisms []string, domain string, ip net.IP, 
 
 func (conn *Conn) evalSPFMacros(spf string, ip net.IP) string {
 	name := ""
-	names, err := net.LookupAddr(ip.String())
+	names, err := dns.LookupAddr(ip.String())
 	if err == nil {
 		name = names[0]
 	}
@@ -194,7 +195,7 @@ func (conn *Conn) evalSPFA(action bool, param, prefix, domain, fullmechanism str
 	if len(tocheck) == 0 {
 		tocheck = conn.mailFrom.Domain
 	}
-	ars, err := net.LookupIP(tocheck)
+	ars, err := dns.LookupIP(tocheck)
 	lookups++
 	if lookups > 10 {
 		log.Errorf("%s: spf for %s has too much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
@@ -217,7 +218,7 @@ func (conn *Conn) evalSPFMX(action bool, param, prefix, domain, fullmechanism st
 	if len(tocheck) == 0 {
 		tocheck = conn.mailFrom.Domain
 	}
-	mxs, err := net.LookupMX(tocheck)
+	mxs, err := dns.LookupMX(tocheck)
 	lookups++
 	if lookups > 10 {
 		log.Errorf("%s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
@@ -227,7 +228,7 @@ func (conn *Conn) evalSPFMX(action bool, param, prefix, domain, fullmechanism st
 		return true, false, lookups
 	}
 	for _, mx := range mxs {
-		ars, err := net.LookupIP(mx.Host)
+		ars, err := dns.LookupIP(mx.Host)
 		lookups++
 		if lookups > 10 {
 			log.Errorf("%s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
@@ -247,7 +248,7 @@ func (conn *Conn) evalSPFMX(action bool, param, prefix, domain, fullmechanism st
 }
 
 func (conn *Conn) evalSPFPTR(action bool, param, prefix, domain, fullmechanism string, ip net.IP, lookups int) (bool, bool, int) {
-	names, err := net.LookupAddr(ip.String())
+	names, err := dns.LookupAddr(ip.String())
 	lookups++
 	if lookups > 10 {
 		log.Errorf("%s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
@@ -257,7 +258,7 @@ func (conn *Conn) evalSPFPTR(action bool, param, prefix, domain, fullmechanism s
 		return true, false, lookups
 	}
 	for _, name := range names {
-		ips, err := net.LookupIP(name)
+		ips, err := dns.LookupIP(name)
 		lookups++
 		if lookups > 10 {
 			log.Errorf("%s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
@@ -276,7 +277,7 @@ func (conn *Conn) evalSPFPTR(action bool, param, prefix, domain, fullmechanism s
 }
 
 func (conn *Conn) evalSPFExists(action bool, param, prefix, domain, fullmechanism string, ip net.IP, lookups int) (bool, bool, int) {
-	ars, err := net.LookupIP(param)
+	ars, err := dns.LookupIP(param)
 	lookups++
 	if lookups > 10 {
 		log.Errorf("%s: spf for %s has much dns lookups at '%s'", conn.showClient(), domain, fullmechanism)
