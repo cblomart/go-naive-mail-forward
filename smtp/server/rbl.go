@@ -4,9 +4,63 @@ import (
 	log "cblomart/go-naive-mail-forward/logger"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 )
+
+type rblEntry struct {
+	Name      string
+	LastCheck time.Time
+	Bad       bool
+}
+
+const rblCacheTTL = 2 * time.Hour
+
+var rblCache []*rblEntry
+var rblCacheLock sync.Mutex
+
+func checkRBLCache(name string) (bool, bool) {
+	rblCacheLock.Lock()
+	defer rblCacheLock.Unlock()
+	// standardize name
+	name = strings.ToLower(strings.TrimRight(name, "."))
+	// default return values
+	bad := true
+	found := false
+	toRemove := []int{}
+	for i, entry := range rblCache {
+		if name == entry.Name {
+			found = true
+			bad = entry.Bad
+			entry.LastCheck = time.Now()
+			break
+		}
+		if entry.LastCheck.Before(time.Now().Add(-rblCacheTTL)) {
+			toRemove = append(toRemove, i)
+		}
+	}
+	// remove expired entries
+	// sort entries to remove to avoid issues
+	sort.Sort(sort.Reverse(sort.IntSlice(toRemove)))
+	for _, i := range toRemove {
+		// set element to remove to the last one
+		rblCache[i] = rblCache[len(rblCache)-1]
+		// remove the last element of the slice
+		rblCache = rblCache[:len(rblCache)-1]
+	}
+	// return result
+	return bad, found
+}
+
+func addRBLCache(name string, bad bool) {
+	rblCacheLock.Lock()
+	defer rblCacheLock.Unlock()
+	// standardize name
+	name = strings.ToLower(strings.TrimRight(name, "."))
+	rblCache = append(rblCache, &rblEntry{Name: name, Bad: bad, LastCheck: time.Now()})
+}
 
 func (conn *Conn) checkRBL(hostname string) bool {
 	if strings.EqualFold(hostname, Localhost) {
@@ -14,7 +68,8 @@ func (conn *Conn) checkRBL(hostname string) bool {
 		return false
 	}
 	// check dns blacklist per ip
-	bad := CheckRBLAddr(conn.conn.RemoteAddr(), conn.dnsbl)
+	tcpAddr := conn.conn.RemoteAddr().(*net.TCPAddr)
+	bad := CheckRBLIP(tcpAddr.IP, conn.dnsbl)
 	if !bad {
 		// check dns blacklist per name
 		bad = CheckRBLName(hostname, conn.dnsbl)
@@ -27,6 +82,11 @@ func CheckRBLName(host string, rbls []string) bool {
 	if !DomainMatch.MatchString(host) {
 		// do not try to match on non hostname
 		return true
+	}
+	// check in the cache
+	bad, found := checkRBLCache(host)
+	if found {
+		return bad
 	}
 	// prepare to call async
 	result := false
@@ -42,6 +102,7 @@ func CheckRBLName(host string, rbls []string) bool {
 		go CheckRBLIPAsync(ip, rbls, &result, &wg)
 	}
 	wg.Wait()
+	addRBLCache(host, result)
 	return result
 }
 
@@ -52,13 +113,14 @@ func CheckRBLIPAsync(ip net.IP, rbls []string, res *bool, wg *sync.WaitGroup) {
 		*res = true
 	}
 }
-func CheckRBLAddr(addr net.Addr, rbls []string) bool {
-	tcp := addr.(*net.TCPAddr)
-	return CheckRBLIP(tcp.IP, rbls)
-}
 
 func CheckRBLIP(ip net.IP, rbls []string) bool {
 	log.Debugf("checking rbl on ip %s", ip.String())
+	// check in cache
+	bad, found := checkRBLCache(ip.String())
+	if found {
+		return bad
+	}
 	// calculate prefix to resolve
 	prefix := ""
 	tmp := ip.String()
@@ -80,6 +142,7 @@ func CheckRBLIP(ip net.IP, rbls []string) bool {
 	}
 	// prefix should be there
 	if len(prefix) == 0 {
+		log.Warnf("RBL unable go get dns prefix for %s", ip.String())
 		return false
 	}
 	// check in // for ip resolution result (true: found; false: not found)
@@ -90,6 +153,7 @@ func CheckRBLIP(ip net.IP, rbls []string) bool {
 		go ResolvAsync(fmt.Sprintf("%s.%s", prefix, rbl), &result, &wg)
 	}
 	wg.Wait()
+	addRBLCache(ip.String(), result)
 	return result
 }
 
