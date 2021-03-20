@@ -167,6 +167,10 @@ func (conn *Conn) read() error {
 	txt = strings.ReplaceAll(txt, "\r", "\\r")
 	log.Debugf("%s: appending '%s' to buffer", conn.showClient(), txt)
 	conn.dataBuffer.Write(buffer[:n])
+	// buffer doesn't contain a line feed
+	if !bytes.ContainsRune(buffer, '\n') {
+		return nil
+	}
 	for {
 		line, err := conn.dataBuffer.ReadString('\n')
 		if err == io.EOF {
