@@ -593,16 +593,18 @@ func (conn *Conn) binarydata(params string) {
 	}
 	last := len(parts) == 2
 
+	tracelen := 0
 	// check if buffer has already be filled and add trace
 	if conn.dataBuffer.Len() == 0 {
 		trace := conn.getTrace()
 		log.Debugf("%s: trace: %s", conn.showClient(), trace)
-		_, err := conn.dataBuffer.WriteString(fmt.Sprintf("%s\r\n", trace))
+		n, err := conn.dataBuffer.WriteString(fmt.Sprintf("%s\r\n", trace))
 		if err != nil {
 			log.Errorf("%s: cannot initialize message buffer", conn.showClient())
 			conn.send(smtp.STATUSERROR, "cannot initialize message buffer")
 			return
 		}
+		tracelen = n
 	}
 
 	// info
@@ -619,7 +621,7 @@ func (conn *Conn) binarydata(params string) {
 	}
 
 	// bytes left to read
-	toread := int(datalen) - conn.dataBuffer.Len()
+	toread := int(datalen) - conn.dataBuffer.Len() + tracelen
 
 	// copy to buffer
 	_, err = io.CopyN(conn.dataBuffer, conn.conn, int64(toread))
