@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"net/textproto"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -157,15 +158,12 @@ func (conn *Conn) writeall() error {
 }
 
 func (conn *Conn) read() error {
-	buffer := make([]byte, 2048)
+	buffer := make([]byte, os.Getpagesize())
 	n, err := conn.conn.Read(buffer)
 	if err != nil {
 		return err
 	}
-	txt := string(buffer[:n])
-	txt = strings.ReplaceAll(txt, "\n", "\\n")
-	txt = strings.ReplaceAll(txt, "\r", "\\r")
-	log.Debugf("%s: appending '%s' to buffer", conn.showClient(), txt)
+	log.Debugf("%s: appending %d bytes to buffer", conn.showClient(), n)
 	conn.dataBuffer.Write(buffer[:n])
 	// buffer doesn't end in a line feed (data buffer neither)
 	if buffer[n-1] != '\n' {
