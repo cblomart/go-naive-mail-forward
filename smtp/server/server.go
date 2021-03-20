@@ -165,7 +165,7 @@ func (conn *Conn) read() error {
 	txt := string(buffer[:n])
 	txt = strings.ReplaceAll(txt, "\n", "\\n")
 	txt = strings.ReplaceAll(txt, "\r", "\\r")
-	log.Debugf("%s: appending '%s' to buffer", conn.showClient(), string(buffer[:n]))
+	log.Debugf("%s: appending '%s' to buffer", conn.showClient(), txt)
 	conn.dataBuffer.Write(buffer[:n])
 	for {
 		line, err := conn.dataBuffer.ReadString('\n')
