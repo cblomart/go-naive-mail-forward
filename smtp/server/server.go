@@ -168,7 +168,7 @@ func (conn *Conn) read() error {
 	log.Debugf("%s: appending '%s' to buffer", conn.showClient(), txt)
 	conn.dataBuffer.Write(buffer[:n])
 	// buffer doesn't end in a line feed (data buffer neither)
-	if buffer[n] != '\n' {
+	if buffer[n-1] != '\n' {
 		return nil
 	}
 	for {
