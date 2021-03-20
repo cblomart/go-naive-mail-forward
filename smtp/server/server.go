@@ -197,7 +197,7 @@ func (conn *Conn) processMessages() {
 	// acknowlege the new comer
 	conn.ack()
 	err := conn.writeall()
-	if err != nil {
+	if err != nil && !conn.close {
 		log.Errorf("%s: write error %s", conn.showClient(), err.Error())
 	}
 	// start the command response session
@@ -736,8 +736,8 @@ func (conn *Conn) readdata() error {
 
 func (conn *Conn) quit() {
 	log.Debugf("%s: goodbye", conn.showClient())
-	conn.send(smtp.STATUSBYE, "goodbye")
 	conn.close = true
+	conn.send(smtp.STATUSBYE, "goodbye")
 }
 
 func (conn *Conn) parse(command string) (string, string, error) {
