@@ -174,7 +174,6 @@ func (conn *Conn) read() error {
 	for {
 		line, err := conn.dataBuffer.ReadString('\n')
 		if err == io.EOF {
-			log.Debugf("%s: read hit eof", conn.showClient())
 			break
 		}
 		if err != nil {
