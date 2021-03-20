@@ -65,6 +65,7 @@ type Conn struct {
 	nospf          bool
 	responseBuffer []*Response
 	dataBuffer     *bytes.Buffer
+	readBuffer     []byte
 	dataStart      int64
 	dataFinish     int64
 }
@@ -132,6 +133,7 @@ func GetSMTPConn(conn *net.TCPConn, serverName string, processor *process.Proces
 		nospf:          nospf,
 		responseBuffer: []*Response{},
 		dataBuffer:     &bytes.Buffer{},
+		readBuffer:     make([]byte, os.Getpagesize()),
 	}
 	return &smtpConn
 }
@@ -158,15 +160,14 @@ func (conn *Conn) writeall() error {
 }
 
 func (conn *Conn) read() error {
-	buffer := make([]byte, os.Getpagesize())
-	n, err := conn.conn.Read(buffer)
+	n, err := conn.conn.Read(conn.readBuffer)
 	if err != nil {
 		return err
 	}
 	log.Debugf("%s: appending %d bytes to buffer", conn.showClient(), n)
-	conn.dataBuffer.Write(buffer[:n])
+	conn.dataBuffer.Write(conn.readBuffer[:n])
 	// buffer doesn't end in a line feed (data buffer neither)
-	if buffer[n-1] != '\n' {
+	if conn.readBuffer[n-1] != '\n' {
 		return nil
 	}
 	for {
