@@ -163,11 +163,11 @@ func (conn *Conn) read() error {
 		return err
 	}
 	//log what was recieved
-	for _, line := range strings.Split(string(buffer[:n]), "\n") {
-		line = whitespace.ReplaceAllString(line, " ")
-		line = strings.TrimSpace(line)
-		log.Tracef("%s: # %s", conn.showClient(), line)
-	}
+	//for _, line := range strings.Split(string(buffer[:n]), "\n") {
+	//	line = whitespace.ReplaceAllString(line, " ")
+	//	line = strings.TrimSpace(line)
+	//	log.Tracef("%s: # %s", conn.showClient(), line)
+	//}
 	conn.dataBuffer.Write(buffer[:n])
 	for {
 		line, err := conn.dataBuffer.ReadString('\n')
