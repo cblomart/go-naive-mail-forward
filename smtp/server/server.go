@@ -162,16 +162,15 @@ func (conn *Conn) read() error {
 	if err != nil {
 		return err
 	}
-	//log what was recieved
-	//for _, line := range strings.Split(string(buffer[:n]), "\n") {
-	//	line = whitespace.ReplaceAllString(line, " ")
-	//	line = strings.TrimSpace(line)
-	//	log.Tracef("%s: # %s", conn.showClient(), line)
-	//}
+	txt := string(buffer[:n])
+	txt = strings.ReplaceAll(txt, "\n", "\\n")
+	txt = strings.ReplaceAll(txt, "\r", "\\r")
+	log.Debugf("%s: appending '%s' to buffer", conn.showClient(), string(buffer[:n]))
 	conn.dataBuffer.Write(buffer[:n])
 	for {
 		line, err := conn.dataBuffer.ReadString('\n')
 		if err == io.EOF {
+			log.Debugf("%s: read hit eof", conn.showClient())
 			break
 		}
 		if err != nil {
