@@ -157,7 +157,7 @@ func (conn *Conn) writeall() error {
 }
 
 func (conn *Conn) read() error {
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, 2048)
 	n, err := conn.conn.Read(buffer)
 	if err != nil {
 		return err
@@ -167,8 +167,8 @@ func (conn *Conn) read() error {
 	txt = strings.ReplaceAll(txt, "\r", "\\r")
 	log.Debugf("%s: appending '%s' to buffer", conn.showClient(), txt)
 	conn.dataBuffer.Write(buffer[:n])
-	// buffer doesn't contain a line feed
-	if !bytes.ContainsRune(buffer, '\n') {
+	// buffer doesn't end in a line feed (data buffer neither)
+	if buffer[n] != '\n' {
 		return nil
 	}
 	for {
