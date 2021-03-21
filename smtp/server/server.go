@@ -390,7 +390,6 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	conn.extended = extended
 	conn.clientName = hostname
 	conn.dataBuffer.Reset()
-	log.Infof("%s: welcoming name: '%s'\n", conn.showClient(), hostname)
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
 	capabilities := []string{}
@@ -399,6 +398,11 @@ func (conn *Conn) helo(hostname string, extended bool) {
 		if !istls && conn.tlsConfig != nil {
 			capabilities = append(capabilities, "STARTTLS")
 		}
+	}
+	if istls {
+		log.Debugf("%s: welcoming name over tls: '%s'\n", conn.showClient(), hostname)
+	} else {
+		log.Infof("%s: welcoming name: '%s'\n", conn.showClient(), hostname)
 	}
 	conn.send(smtp.STATUSOK, fmt.Sprintf("welcome %s", hostname), capabilities...)
 }
