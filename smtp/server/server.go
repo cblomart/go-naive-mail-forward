@@ -16,6 +16,7 @@ import (
 	"net/textproto"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,20 +30,23 @@ import (
 )
 
 const (
-	Localhost       = "localhost"
-	Healthcheck     = "healthcheck"
-	timeoutDuration = 100 * time.Millisecond
+	Localhost        = "localhost"
+	Healthcheck      = "healthcheck"
+	timeoutDuration  = 100 * time.Millisecond
+	BlackListTimeout = 24 * time.Hour
 )
 
 var (
-	Trace        = false
-	Debug        = false
-	DomainMatch  = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
-	BdataParams  = regexp.MustCompile(`(?i)^[0-9]+( +LAST)?$`)
-	whitespace   = regexp.MustCompile(`\s+`)
-	clientId     = 0
-	clientIdLock = sync.RWMutex{}
-	needHelo     = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
+	Trace         = false
+	Debug         = false
+	DomainMatch   = regexp.MustCompile(`(?i)^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
+	BdataParams   = regexp.MustCompile(`(?i)^[0-9]+( +LAST)?$`)
+	whitespace    = regexp.MustCompile(`\s+`)
+	clientId      = 0
+	clientIdLock  = sync.RWMutex{}
+	needHelo      = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
+	BlackList     = []*BlackListEntry{}
+	BlackListLock = sync.Mutex{}
 )
 
 //Conn is a smtp client connection
@@ -76,6 +80,44 @@ type Response struct {
 	Extra   []string
 }
 
+type BlackListEntry struct {
+	Address   net.Addr
+	LastCheck time.Time
+}
+
+func CheckBlackList(address net.Addr) bool {
+	BlackListLock.Lock()
+	defer BlackListLock.Unlock()
+	// search for blacklist
+	toRemove := []int{}
+	found := false
+	for i, entry := range BlackList {
+		if entry.Address == address {
+			entry.LastCheck = time.Now()
+			found = true
+		}
+		if entry.LastCheck.Before(time.Now().Add(-BlackListTimeout)) {
+			toRemove = append(toRemove, i)
+		}
+	}
+	// remove expired entries
+	// sort entries to remove to avoid issues
+	sort.Sort(sort.Reverse(sort.IntSlice(toRemove)))
+	for _, i := range toRemove {
+		// set element to remove to the last one
+		BlackList[i] = BlackList[len(BlackList)-1]
+		// remove the last element of the slice
+		BlackList = BlackList[:len(BlackList)-1]
+	}
+	return found
+}
+
+func AddBlackList(address net.Addr) {
+	BlackListLock.Lock()
+	defer BlackListLock.Unlock()
+	BlackList = append(BlackList, &BlackListEntry{Address: address, LastCheck: time.Now()})
+}
+
 // String show the response on one string
 func (r *Response) String() string {
 	return fmt.Sprintf("%d %s (+%s)", r.Code, r.Message, strings.Join(r.Extra, ","))
@@ -93,6 +135,11 @@ func (r *Response) Lines() []string {
 
 // HandleSMTPConn handles a smtp connection
 func HandleSMTPConn(conn *net.TCPConn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
+	if CheckBlackList(conn.RemoteAddr()) {
+		log.Warnf("%s blacklisted so dropping", conn.RemoteAddr().String())
+		conn.Close()
+		return
+	}
 	smtpConn := GetSMTPConn(conn, serverName, processor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
 	log.Debugf("%s: new connection from %s", smtpConn.showClient(), conn.RemoteAddr().String())
 	defer smtpConn.Close()
@@ -316,6 +363,7 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	hostname = strings.ToLower(strings.TrimRight(hostname, "."))
 	log.Debugf("%s: checking hostname: %s", conn.showClient(), hostname)
 	if !conn.hostnameChecks(hostname) {
+		AddBlackList(conn.conn.RemoteAddr())
 		conn.send(smtp.STATUSNOACK, "malformed hostname")
 		conn.close = true
 		return
@@ -323,6 +371,7 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	log.Debugf("%s: checking if legit localhost: %s", conn.showClient(), hostname)
 	// check that localhost connections comes from localhost
 	if strings.EqualFold(hostname, Localhost) && !conn.ipIsLocal() {
+		AddBlackList(conn.conn.RemoteAddr())
 		log.Warnf("%s: localhost but not local ip: '%s'\n", conn.showClient(), hostname)
 		conn.send(smtp.STATUSNOACK, "invalid localhost handshake")
 		conn.close = true
