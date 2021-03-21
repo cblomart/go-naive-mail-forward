@@ -1,7 +1,8 @@
 # Go Naive Mail Forward
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/cblomart/go-naive-mail-forward)](https://goreportcard.com/report/github.com/cblomart/go-naive-mail-forward)
-[![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/cblomart/go-naive-mail-forward?style=flat)](https://hub.docker.com/repository/docker/cblomart/go-naive-mail-forward)
+[![Actions Status](https://github.com/cblomart/go-naive-mail-forward/workflows/build/badge.svg)](https://github.com/cblomart/go-naive-mail-forward/actions)
+
 
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fcblomart%2Fgo-naive-mail-forward%2Fmaster%2Fazuredeploy.json)
