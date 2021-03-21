@@ -1,7 +1,7 @@
 # Go Naive Mail Forward
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/cblomart/go-naive-mail-forward)](https://goreportcard.com/report/github.com/cblomart/go-naive-mail-forward)
-[![Actions Status](https://github.com/cblomart/go-naive-mail-forward/workflows/build/badge.svg)](https://github.com/cblomart/go-naive-mail-forward/actions)
+[![Actions Status](https://github.com/cblomart/go-naive-mail-forward/workflows/Docker/badge.svg)](https://github.com/cblomart/go-naive-mail-forward/actions)
 
 
 
