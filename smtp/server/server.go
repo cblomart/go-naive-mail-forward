@@ -137,6 +137,7 @@ func (r *Response) Lines() []string {
 func HandleSMTPConn(conn *net.TCPConn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
 	if CheckBlackList(conn.RemoteAddr()) {
 		log.Warnf("%s blacklisted so dropping", conn.RemoteAddr().String())
+		// #nosec G104 ignore errors on close
 		conn.Close()
 		return
 	}
