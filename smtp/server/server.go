@@ -142,7 +142,7 @@ func HandleSMTPConn(conn *net.TCPConn, serverName string, processor *process.Pro
 		return
 	}
 	smtpConn := GetSMTPConn(conn, serverName, processor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
-	log.Debugf("%s: new connection from %s", smtpConn.showClient(), conn.RemoteAddr().String())
+	log.Infof("%s: new connection from %s", smtpConn.showClient(), conn.RemoteAddr().String())
 	defer smtpConn.Close()
 	log.Debugf("%s: starting processing commands", smtpConn.showClient())
 	smtpConn.processMessages()
