@@ -390,7 +390,7 @@ func (conn *Conn) helo(hostname string, extended bool) {
 	conn.extended = extended
 	conn.clientName = hostname
 	conn.dataBuffer.Reset()
-	log.Debugf("%s: welcoming name: '%s'\n", conn.showClient(), hostname)
+	log.Infof("%s: welcoming name: '%s'\n", conn.showClient(), hostname)
 	// check if startls done
 	_, istls := conn.conn.(*tls.Conn)
 	capabilities := []string{}
