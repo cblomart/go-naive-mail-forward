@@ -81,22 +81,24 @@ type Response struct {
 }
 
 type BlackListEntry struct {
-	Address   net.Addr
+	IP        net.IP
 	LastCheck time.Time
 }
 
 func CheckBlackList(address net.Addr) bool {
 	BlackListLock.Lock()
 	defer BlackListLock.Unlock()
+	tcpaddr := address.(*net.TCPAddr)
 	// search for blacklist
 	toRemove := []int{}
 	found := false
 	for i, entry := range BlackList {
-		if entry.Address == address {
+		if entry.IP.Equal(tcpaddr.IP) {
 			entry.LastCheck = time.Now()
 			found = true
 		}
 		if entry.LastCheck.Before(time.Now().Add(-BlackListTimeout)) {
+			log.Infof("remove from blacklist: %s", tcpaddr.IP.String())
 			toRemove = append(toRemove, i)
 		}
 	}
@@ -115,7 +117,9 @@ func CheckBlackList(address net.Addr) bool {
 func AddBlackList(address net.Addr) {
 	BlackListLock.Lock()
 	defer BlackListLock.Unlock()
-	BlackList = append(BlackList, &BlackListEntry{Address: address, LastCheck: time.Now()})
+	tcpaddr := address.(*net.TCPAddr)
+	log.Infof("add to blacklist: %s", tcpaddr.IP.String())
+	BlackList = append(BlackList, &BlackListEntry{IP: tcpaddr.IP, LastCheck: time.Now()})
 }
 
 // String show the response on one string
