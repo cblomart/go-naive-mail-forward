@@ -80,7 +80,7 @@ jobs:
           name: go-naive-mail-forward
           dns-name-label: gomxzerottl
           image: ${{ github.repository }}:${{ env.GITHUB_SHA_SHORT }}
-          environment-variables: FORWARDER_RULES="@zerottl.cc:cblomart@microsoft.com" FORWARDER_SERVERNAME="mx.zerottl.cc" FORWARDER_NOSPF="true"
+          environment-variables: FORWARDER_RULES="@zerottl.cc:cblomart@microsoft.com" FORWARDER_SERVERNAME="mx.zerottl.cc" FORWARDER_NOSPF="true" FORWARDER_NOBLACKLIST="true"
           ip-address: Public
           ports: 25
           location: 'westeurope'
