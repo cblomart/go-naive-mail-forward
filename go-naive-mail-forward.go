@@ -39,6 +39,7 @@ var (
 	instrumentationKey string
 	insecuretls        bool
 	nospf              bool
+	noblacklist        bool
 )
 
 func init() {
@@ -64,6 +65,7 @@ func init() {
 	flag.StringVar(&instrumentationKey, "instkey", "", "Azure application insight instrumentation key")
 	flag.BoolVar(&insecuretls, "insecuretls", false, "Allow insecure tls connections (client & server)")
 	flag.BoolVar(&nospf, "nospf", false, "disable spf checking")
+	flag.BoolVar(&noblacklist, "noblacklist", false, "disable ip blacklisting")
 }
 
 func main() {
@@ -124,7 +126,7 @@ func main() {
 		if err != nil {
 			log.Fatalf(err.Error())
 		}
-		go server.HandleSMTPConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, insecuretls, nospf, true)
+		go server.HandleSMTPConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, insecuretls, nospf, noblacklist)
 	}
 }
 

@@ -65,6 +65,10 @@
                     {
                         "name": "FORWARDER_NOSPF",
                         "value": "true"
+                    },
+                    {
+                        "name": "FORWARDER_NOBLACKLIST",
+                        "value": "true"
                     }
                 ],
                 "resources": {
