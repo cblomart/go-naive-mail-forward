@@ -45,6 +45,7 @@ var (
 	clientId      = 0
 	clientIdLock  = sync.RWMutex{}
 	needHelo      = []string{"RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "STARTTLS"}
+	validCmd      = []string{"QUIT", "HELO", "EHLO", "STARTTLS", "NOOP", "RSET", "MAIL FROM", "RCPT TO", "DATA", "BDAT", "DEBUG", "TRACE"}
 	BlackList     = []*BlackListEntry{}
 	BlackListLock = sync.Mutex{}
 )
@@ -72,6 +73,7 @@ type Conn struct {
 	readBuffer     []byte
 	dataStart      int64
 	dataFinish     int64
+	unknownCount   int
 }
 
 type Response struct {
@@ -287,6 +289,10 @@ func (conn *Conn) processLine(line string) bool {
 		conn.send(smtp.STATUSBADSEC, "please say hello first")
 		return true
 	}
+	if utils.ContainsString(validCmd, cmd) >= 0 && conn.unknownCount != 0 {
+		log.Debugf("%s: reseting invalid command count\n", conn.showClient())
+		conn.unknownCount = 0
+	}
 	conn.execCommand(cmd, params)
 	return cmd == "QUIT"
 }
@@ -360,6 +366,13 @@ func (conn *Conn) ack() {
 }
 
 func (conn *Conn) unknown(command string) {
+	conn.unknownCount += 1
+	if conn.unknownCount > 3 {
+		log.Warnf("%s: closing after too much invalid syntax", conn.showClient())
+		conn.send(smtp.STATUSNOACK, "closing after too much invalid syntax")
+		conn.close = true
+		return
+	}
 	log.Warnf("%s: syntax error: '%s'\n", conn.showClient(), command)
 	conn.send(smtp.STATUSERROR, "syntax error")
 }
