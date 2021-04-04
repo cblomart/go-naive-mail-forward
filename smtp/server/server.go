@@ -138,8 +138,8 @@ func (r *Response) Lines() []string {
 }
 
 // HandleSMTPConn handles a smtp connection
-func HandleSMTPConn(conn *net.TCPConn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool) {
-	if CheckBlackList(conn.RemoteAddr()) {
+func HandleSMTPConn(conn *net.TCPConn, serverName string, processor *process.Process, domains []string, dnsbl string, keyfile string, certfile string, insecuretls bool, nospf bool, noblacklist bool) {
+	if CheckBlackList(conn.RemoteAddr()) && !noblacklist {
 		log.Warnf("%s blacklisted so dropping", conn.RemoteAddr().String())
 		// #nosec G104 ignore errors on close
 		conn.Close()

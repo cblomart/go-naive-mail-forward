@@ -124,7 +124,7 @@ func main() {
 		if err != nil {
 			log.Fatalf(err.Error())
 		}
-		go server.HandleSMTPConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, insecuretls, nospf)
+		go server.HandleSMTPConn(conn, servername, msgProcessor, domains, dnsbl, keyfile, certfile, insecuretls, nospf, true)
 	}
 }
 
