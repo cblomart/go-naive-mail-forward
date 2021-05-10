@@ -13,7 +13,7 @@ type MailAddress struct {
 }
 
 var (
-	UserMatch   = regexp.MustCompile(`^[a-zA-Z0-9'_][a-zA-Z0-9'_.-]+[a-zA-Z0-9'_]$`)
+	UserMatch   = regexp.MustCompile(`^[a-zA-Z0-9'_]([a-zA-Z0-9'_.-]*[a-zA-Z0-9'_])?$`)
 	DomainMatch = regexp.MustCompile(`^([a-z0-9-]{1,63}\.)+[a-z]{2,63}\.?$`)
 )
 
