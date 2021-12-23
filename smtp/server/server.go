@@ -10,6 +10,7 @@ import (
 	"cblomart/go-naive-mail-forward/tlsinfo"
 	"cblomart/go-naive-mail-forward/utils"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	log "cblomart/go-naive-mail-forward/logger"
@@ -257,7 +259,11 @@ func (conn *Conn) processMessages() {
 	// start the command response session
 	for !conn.close {
 		err := conn.read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
+			log.Debugf("%s: read error %s", conn.showClient(), err.Error())
+			break
+		}
+		if errors.Is(err, syscall.ECONNRESET) {
 			log.Debugf("%s: read error %s", conn.showClient(), err.Error())
 			break
 		}
