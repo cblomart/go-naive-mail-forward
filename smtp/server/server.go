@@ -409,6 +409,13 @@ func (conn *Conn) helo(hostname string, extended bool) {
 		conn.close = true
 		return
 	}
+	// check throttled
+	if CheckThrottle(hostname) {
+		log.Warnf("%s: throttled actor: '%s'\n", conn.showClient(), hostname)
+		conn.send(smtp.STATUSNOACK, "flagged due to bad behavior")
+		conn.close = true
+		return
+	}
 	conn.hello = true
 	conn.extended = extended
 	conn.clientName = hostname
@@ -517,6 +524,7 @@ func (conn *Conn) mailfrom(param string) {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
 		log.Errorf("%s: mail from %s not valid", conn.showClient(), ma)
+		AddThrottle(conn.clientName)
 		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("from %s nok", param))
 		return
 	}
@@ -530,6 +538,7 @@ func (conn *Conn) rcptto(param string) {
 	ma, err := address.NewMailAddress(param)
 	if err != nil {
 		log.Errorf("%s: recipient %s not valid: %s", conn.showClient(), param, err)
+		AddThrottle(conn.clientName)
 		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("recipient %s nok", param))
 		return
 	}
@@ -542,6 +551,7 @@ func (conn *Conn) rcptto(param string) {
 	}
 	if !acceptedDomain {
 		log.Errorf("%s: recipient %s not in a valid domain", conn.showClient(), ma.String())
+		AddThrottle(conn.clientName)
 		conn.send(smtp.STATUSNOPOL, fmt.Sprintf("recipient %s domain nok", param))
 		return
 	}
@@ -605,7 +615,7 @@ func (conn *Conn) data() {
 	err := conn.writeall()
 	if err != nil {
 		log.Infof("%s: %s\n", conn.showClient(), err.Error())
-		conn.send(smtp.STATUSFAIL, "faile to start read")
+		conn.send(smtp.STATUSFAIL, "failed to start read")
 		return
 	}
 
@@ -757,6 +767,7 @@ func (conn *Conn) sendmessage(msg message.Message) {
 	accept, _ := conn.spfCheck("", 0)
 	if !accept && !msg.Signed() {
 		log.Warnf("%s: message %s is not signed and refused by SPF checks", conn.showClient(), msg.Id)
+		AddThrottle(conn.clientName)
 		conn.send(smtp.STATUSNOPOL, "spf failed")
 		conn.close = true
 		return
@@ -766,6 +777,7 @@ func (conn *Conn) sendmessage(msg message.Message) {
 
 	if err != nil {
 		log.Errorf("%s:%s: error handling message: %s", conn.showClient(), msgID, err.Error())
+		AddThrottle(conn.clientName)
 		if reject {
 			conn.send(smtp.STATUSNOPOL, "mail rejected")
 			return
@@ -818,7 +830,13 @@ func (conn *Conn) quit() {
 }
 
 func (conn *Conn) parse(command string) (string, string, error) {
+	if CheckThrottle(conn.clientName) {
+		conn.send(smtp.STATUSBYE, "not accepting commnads anymore")
+		conn.close = true
+		return "", "", fmt.Errorf("host has been throttled")
+	}
 	if !IsAsciiPrintable(command) {
+		AddThrottle(conn.clientName)
 		conn.send(smtp.STATUSBYE, "unacceptable characters")
 		conn.close = true
 		return "", "", fmt.Errorf("command contains non ascii printable characters")

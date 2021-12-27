@@ -20,7 +20,7 @@ import (
 
 const (
 	envPrefix = "FORWARDER_"
-	OK        = 220
+	OK        = 220 // OK message
 )
 
 var (
