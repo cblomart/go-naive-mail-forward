@@ -49,12 +49,7 @@ func CheckThrottle(name string) bool {
 		// remove the last element of the slice
 		throttleCache = throttleCache[:len(rblCache)-1]
 	}
-	if attempts >= throttleMaxAttempts {
-		// block host if in cache with throttleMaxAttempts
-		return true
-	}
-	// default don't block
-	return false
+	return attempts >= throttleMaxAttempts
 }
 
 // AddThrottle add a host to throttle list (due to bad action)
