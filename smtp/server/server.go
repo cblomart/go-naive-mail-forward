@@ -833,7 +833,7 @@ func (conn *Conn) parse(command string) (string, string, error) {
 	if CheckThrottle(conn.clientName) {
 		conn.send(smtp.STATUSBYE, "not accepting commnads anymore")
 		conn.close = true
-		return "", "", fmt.Errorf("host has been throttled")
+		return "", "", fmt.Errorf("host has been throttled '%s'", conn.clientName)
 	}
 	if !IsAsciiPrintable(command) {
 		AddThrottle(conn.clientName)
