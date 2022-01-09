@@ -25,6 +25,9 @@ var throttleCacheLock sync.Mutex
 
 // CheckThrottle checks the cache for the host name
 func CheckThrottle(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
 	throttleCacheLock.Lock()
 	defer throttleCacheLock.Unlock()
 	name = strings.ToLower(strings.TrimRight(name, "."))
@@ -54,6 +57,9 @@ func CheckThrottle(name string) bool {
 
 // AddThrottle add a host to throttle list (due to bad action)
 func AddThrottle(name string) {
+	if len(name) == 0 {
+		return
+	}
 	throttleCacheLock.Lock()
 	defer throttleCacheLock.Unlock()
 	// standardize name
